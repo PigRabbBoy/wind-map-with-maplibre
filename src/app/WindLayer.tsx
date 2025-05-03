@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { PathLayer, ScatterplotLayer } from '@deck.gl/layers';
-import { CompositeLayer } from '@deck.gl/core';
+import { CompositeLayer, CompositeLayerProps, Layer, UpdateParameters } from '@deck.gl/core';
 import { generateMockWindData, getWindColor, WindPoint } from '../data/mockWindData';
 
 // กำหนด props สำหรับคอมโพเนนต์ WindLayer
@@ -21,6 +21,23 @@ type WindLayerProps = {
   particleSpeed?: number; // ความเร็วของอนุภาค
 };
 
+// Define WindParticleLayer props type
+type WindParticleLayerProps = {
+  bounds: {
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+  };
+  density?: number;
+  lengthScale?: number;
+  widthScale?: number;
+  particleCount?: number;
+  animate?: boolean;
+  particleSpeed?: number;
+  id?: string;
+};
+
 // นิยาม ParticleType สำหรับเก็บข้อมูลอนุภาคการเคลื่อนไหว
 type ParticleType = {
   position: [number, number]; // ตำแหน่ง [longitude, latitude]
@@ -33,7 +50,7 @@ type ParticleType = {
 };
 
 // สร้าง Layer กำหนดเองสำหรับแสดงอนุภาคลม
-class WindParticleLayer extends CompositeLayer {
+class WindParticleLayer extends CompositeLayer<WindParticleLayerProps> {
   static layerName = 'WindParticleLayer';
   static defaultProps = {
     particleCount: 1000,
@@ -41,6 +58,9 @@ class WindParticleLayer extends CompositeLayer {
     particleSpeed: 0.02,
     fadeOpacity: 0.996, // ค่าการจางหายของการเคลื่อนไหว (ยิ่งมากยิ่งหายช้า)
   };
+
+  // Add property declaration for animationFrame
+  animationFrame: number | null = null;
 
   state = {
     particles: [] as ParticleType[],
@@ -68,10 +88,11 @@ class WindParticleLayer extends CompositeLayer {
     }
   }
 
-  shouldUpdateState({ changeFlags }: { changeFlags: any }) {
-    return changeFlags.propsChanged || 
-           changeFlags.viewportChanged || 
-           changeFlags.dataChanged;
+  shouldUpdateState(params: UpdateParameters<Layer<WindParticleLayerProps & Required<CompositeLayerProps>>>) {
+    const { changeFlags } = params;
+    return Boolean(changeFlags.propsChanged) || 
+           Boolean(changeFlags.viewportChanged) || 
+           Boolean(changeFlags.dataChanged);
   }
   
   // สร้างอนุภาคในบริเวณที่กำหนด
@@ -205,7 +226,7 @@ class WindParticleLayer extends CompositeLayer {
   
   renderLayers() {
     const { particles } = this.state;
-    const { widthScale = 3, lengthScale = 0.5, animate } = this.props;
+    const { widthScale = 3, animate } = this.props;
     
     // เมื่อ animation ถูกปิด ให้แสดงลูกศรทิศทางลมแทน
     if (!animate) {
@@ -329,15 +350,7 @@ export const createWindLayer = ({
 
 // React component for use with <DeckGL> component
 const WindLayer: React.FC<WindLayerProps> = (props) => {
-  const layer = useMemo(() => createWindLayer(props), [
-    props.bounds, 
-    props.density, 
-    props.lengthScale, 
-    props.widthScale,
-    props.particleCount,
-    props.animate,
-    props.particleSpeed
-  ]);
+  useMemo(() => createWindLayer(props), [props]); // Simplify dependencies to just props
   
   return null;
 };

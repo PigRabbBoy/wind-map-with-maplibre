@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
@@ -5,7 +6,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 // Import deck.gl libraries
 import { Deck } from "@deck.gl/core";
-import { MapView } from "@deck.gl/core";
+import { MapView, MapViewState } from "@deck.gl/core";
 import { createWindLayer } from "./WindLayer";
 
 // ขอบเขตภูมิภาคเอเชียตะวันออกเฉียงใต้ (South East Asia)
@@ -46,7 +47,7 @@ function Map() {
   // สร้าง Ref สำหรับเก็บอ้างอิงถึงอิลิเมนต์แผนที่
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
-  const deckRef = useRef<Deck | null>(null);
+  const deckRef = useRef<Deck<MapView[]> | null>(null);
 
   // ขอบเขตแผนที่และข้อมูลลม
   const mapBoundsRef = useRef(SOUTHEAST_ASIA_BOUNDS);
@@ -57,10 +58,50 @@ function Map() {
     lat: INITIAL_LAT,
     zoom: INITIAL_ZOOM,
   });
-  const [layers, setLayers] = useState<any[]>([]);
   
   // สถานะสำหรับควบคุมการเปิด/ปิด animation
   const [animationEnabled, setAnimationEnabled] = useState(true);
+  
+  // Refs สำหรับเก็บ layers ทั้งแบบเคลื่อนไหวและแบบคงที่
+  const animatedLayerRef = useRef<any>(null);
+  const staticLayerRef = useRef<any>(null);
+
+  /**
+   * อัพเดตเลเยอร์ deck.gl โดยการสลับระหว่าง animated และ static layers
+   */
+  const updateDeckGLLayers = useCallback(() => {
+    // อัพเดต deck instance หากมีอยู่แล้ว
+    if (deckRef.current) {
+      // สร้าง layers ทั้งสองแบบเมื่อจำเป็น
+      if (!animatedLayerRef.current) {
+        animatedLayerRef.current = createWindLayer({
+          bounds: mapBoundsRef.current,
+          density: 15,
+          lengthScale: 0.5,
+          widthScale: 3,
+          particleCount: 1500,
+          animate: true,
+          particleSpeed: 0.0075
+        });
+      }
+      
+      if (!staticLayerRef.current) {
+        staticLayerRef.current = createWindLayer({
+          bounds: mapBoundsRef.current,
+          density: 15,
+          lengthScale: 0.5,
+          widthScale: 3,
+          particleCount: 1500,
+          animate: false,
+          particleSpeed: 0.0075
+        });
+      }
+      
+      // เลือก layer ที่จะแสดงตามสถานะ animationEnabled
+      const activeLayer = animationEnabled ? animatedLayerRef.current : staticLayerRef.current;
+      deckRef.current.setProps({ layers: [activeLayer] });
+    }
+  }, [animationEnabled]);
 
   /**
    * ฟังก์ชันอัพเดตขอบเขตแผนที่ที่มองเห็นในปัจจุบัน
@@ -79,33 +120,13 @@ function Map() {
       north: Math.min(bounds.getNorth(), SOUTHEAST_ASIA_BOUNDS.north),
     };
 
+    // รีเซ็ต layer refs เพื่อสร้างใหม่กับขอบเขตที่อัพเดต
+    animatedLayerRef.current = null;
+    staticLayerRef.current = null;
+
     // อัพเดต deck.gl layers
     updateDeckGLLayers();
-  }, []);
-
-  /**
-   * อัพเดตเลเยอร์ deck.gl
-   */
-  const updateDeckGLLayers = useCallback(() => {
-    // สร้าง WindLayer ด้วย deck.gl
-    const windLayer = createWindLayer({
-      bounds: mapBoundsRef.current,
-      density: 15,
-      lengthScale: 0.5,
-      widthScale: 3,
-      particleCount: 1500,
-      animate: animationEnabled,
-      particleSpeed: 0.0075
-    });
-
-    // อัพเดต state สำหรับเลเยอร์
-    setLayers([windLayer]);
-
-    // อัพเดต deck instance หากมีอยู่แล้ว
-    if (deckRef.current) {
-      deckRef.current.setProps({ layers: [windLayer] });
-    }
-  }, [animationEnabled]);
+  }, [updateDeckGLLayers]);
 
   /**
    * สร้างและเริ่มต้น deck.gl สำหรับการแสดงผลลมแบบมีแอนิเมชัน
@@ -123,9 +144,13 @@ function Map() {
       animate: animationEnabled,
       particleSpeed: 0.0075
     });
-
-    // อัพเดต state สำหรับเลเยอร์
-    setLayers([windLayer]);
+    
+    // เก็บ layer ในตัวแปรที่เหมาะสม
+    if (animationEnabled) {
+      animatedLayerRef.current = windLayer;
+    } else {
+      staticLayerRef.current = windLayer;
+    }
 
     // สร้าง DeckGL instance
     deckRef.current = new Deck({
@@ -134,16 +159,19 @@ function Map() {
       height: "100%",
       controller: false, // ไม่ใช้ตัวควบคุมของ deck.gl (ใช้ของ MapLibre แทน)
       initialViewState: {
-        longitude: INITIAL_LNG,
-        latitude: INITIAL_LAT,
-        zoom: INITIAL_ZOOM,
-        pitch: 0,
-        bearing: 0,
+        main: {  // Use a view ID key
+          longitude: INITIAL_LNG,
+          latitude: INITIAL_LAT,
+          zoom: INITIAL_ZOOM,
+          pitch: 0,
+          bearing: 0,
+        }
       },
-      onViewStateChange: ({ viewState }: { viewState: any }) => {
+      onViewStateChange: ({viewState}) => {
         // ซิงค์มุมมองกับ MapLibre
         if (map.current) {
-          const { longitude, latitude, zoom, pitch, bearing } = viewState;
+          // Access the correct viewState properties based on the structure
+          const { longitude, latitude, zoom, pitch, bearing } = viewState as MapViewState;
           map.current.jumpTo({
             center: [longitude, latitude],
             zoom,
@@ -152,44 +180,47 @@ function Map() {
           });
         }
       },
-      views: [new MapView({ repeat: true })],
+      views: [new MapView({ id: 'main', repeat: true })],
       layers: [windLayer],
       // ซิงค์ข้อมูล MapLibre
-      onBeforeRender: ({ gl }: { gl: WebGLRenderingContext }) => {
+      onBeforeRender: () => {
         if (!map.current) return;
         // ซิงค์มุมมองกับ MapLibre
         const viewport = {
-          latitude: map.current.getCenter().lat,
-          longitude: map.current.getCenter().lng,
-          zoom: map.current.getZoom(),
-          bearing: map.current.getBearing(),
-          pitch: map.current.getPitch(),
+          main: {
+            latitude: map.current.getCenter().lat,
+            longitude: map.current.getCenter().lng,
+            zoom: map.current.getZoom(),
+            bearing: map.current.getBearing(),
+            pitch: map.current.getPitch(),
+          }
         };
 
         if (deckRef.current) {
           deckRef.current.setProps({ viewState: viewport });
         }
       },
-      glOptions: {
-        stencil: true,
-      },
+      parameters: {},
     });
 
     // เพิ่ม listener สำหรับการเปลี่ยนแปลงมุมมองของแผนที่
     map.current.on("move", () => {
       if (deckRef.current && map.current) {
         const viewport = {
-          latitude: map.current.getCenter().lat,
-          longitude: map.current.getCenter().lng,
-          zoom: map.current.getZoom(),
-          bearing: map.current.getBearing(),
-          pitch: map.current.getPitch(),
+          main: {
+            latitude: map.current.getCenter().lat,
+            longitude: map.current.getCenter().lng,
+            zoom: map.current.getZoom(),
+            bearing: map.current.getBearing(),
+            pitch: map.current.getPitch(),
+          }
         };
 
         deckRef.current.setProps({ viewState: viewport });
       }
     });
-  }, [animationEnabled]);
+  // แก้ไข dependency ไม่ให้มี animationEnabled เพื่อป้องกัน reload เมื่อกดปุ่ม
+  }, [/* ลบ animationEnabled ออกจาก dependency */]);
 
   /**
    * สร้างและเริ่มต้นแผนที่ MapLibre
@@ -245,8 +276,8 @@ function Map() {
         .then((data) => {
           // กรองเฉพาะประเทศในเอเชียตะวันออกเฉียงใต้
           const filteredData = {
-            type: "FeatureCollection",
-            features: data.features.filter((feature: any) => {
+            type: "FeatureCollection" as const,
+            features: data.features.filter(() => {
               // แสดงทุกประเทศทั่วโลก แต่เน้นประเทศในเอเชียตะวันออกเฉียงใต้
               return true;
             }),
@@ -373,7 +404,7 @@ function Map() {
         deckRef.current = null;
       }
     };
-  }, []); // ไม่ใส่ dependencies เพราะเราต้องการให้ useEffect นี้ทำงานเพียงครั้งเดียวตอนเริ่มต้น
+  }, [initializeDeckGL]); // เพิ่ม initializeDeckGL เป็น dependency
 
   /**
    * เริ่มแอนิเมชันเมื่อแผนที่พร้อมใช้งาน
@@ -402,7 +433,7 @@ function Map() {
         map.current.off("load", onLoad);
       }
     };
-  }, [updateMapBounds]);
+  }, [updateMapBounds, initializeDeckGL]);
 
   return (
     <div>
@@ -461,27 +492,11 @@ function Map() {
           {/* Toggle Switch */}
           <div
             onClick={() => {
-              // เปลี่ยน state ก่อน
-              const newState = !animationEnabled;
-              setAnimationEnabled(newState);
-              
-              // จากนั้นค่อยสร้าง layer ใหม่และอัพเดต Deck ด้วย state ใหม่
-              const windLayer = createWindLayer({
-                bounds: mapBoundsRef.current,
-                density: 15,
-                lengthScale: 0.5,
-                widthScale: 3,
-                particleCount: 1500,
-                animate: newState,
-                particleSpeed: 0.0075
-              });
-              
-              setLayers([windLayer]);
-              
-              // อัพเดต deck instance ทันทีถ้ามี
-              if (deckRef.current) {
-                deckRef.current.setProps({ layers: [windLayer] });
-              }
+              // เปลี่ยน state การเปิด/ปิด animation
+              setAnimationEnabled(!animationEnabled);
+              // อัพเดต layer ที่แสดงอยู่ผ่าน updateDeckGLLayers
+              // ซึ่งจะเลือกใช้ layer ที่เหมาะสมตาม state ใหม่
+              updateDeckGLLayers();
             }}
             style={{
               position: "relative",
