@@ -58,6 +58,9 @@ function Map() {
     zoom: INITIAL_ZOOM,
   });
   const [layers, setLayers] = useState<any[]>([]);
+  
+  // สถานะสำหรับควบคุมการเปิด/ปิด animation
+  const [animationEnabled, setAnimationEnabled] = useState(true);
 
   /**
    * ฟังก์ชันอัพเดตขอบเขตแผนที่ที่มองเห็นในปัจจุบัน
@@ -88,11 +91,11 @@ function Map() {
     const windLayer = createWindLayer({
       bounds: mapBoundsRef.current,
       density: 15,
-      lengthScale: 0.2,
-      widthScale: 2,
-      particleCount: 1000,
-      animate: true,
-      particleSpeed: 0.02,
+      lengthScale: 0.5,
+      widthScale: 3,
+      particleCount: 1500,
+      animate: animationEnabled,
+      particleSpeed: 0.0075
     });
 
     // อัพเดต state สำหรับเลเยอร์
@@ -102,7 +105,7 @@ function Map() {
     if (deckRef.current) {
       deckRef.current.setProps({ layers: [windLayer] });
     }
-  }, []);
+  }, [animationEnabled]);
 
   /**
    * สร้างและเริ่มต้น deck.gl สำหรับการแสดงผลลมแบบมีแอนิเมชัน
@@ -114,11 +117,11 @@ function Map() {
     const windLayer = createWindLayer({
       bounds: mapBoundsRef.current,
       density: 15,
-      lengthScale: 0.2,
-      widthScale: 2,
-      particleCount: 1000,
-      animate: true,
-      particleSpeed: 0.02,
+      lengthScale: 0.5,
+      widthScale: 3,
+      particleCount: 1500,
+      animate: animationEnabled,
+      particleSpeed: 0.0075
     });
 
     // อัพเดต state สำหรับเลเยอร์
@@ -186,7 +189,7 @@ function Map() {
         deckRef.current.setProps({ viewState: viewport });
       }
     });
-  }, []);
+  }, [animationEnabled]);
 
   /**
    * สร้างและเริ่มต้นแผนที่ MapLibre
@@ -419,6 +422,93 @@ function Map() {
         }}
       >
         Longitude: {displayInfo.lng} | Latitude: {displayInfo.lat} | Zoom: {displayInfo.zoom}
+      </div>
+
+      {/* ปุ่มเปิด/ปิด Animation แบบ Toggle */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: "20px",
+          left: "20px",
+          zIndex: 20,
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          alignItems: "flex-start",
+        }}
+      >
+        <div 
+          style={{
+            display: "flex",
+            alignItems: "center",
+            backgroundColor: "rgba(35, 35, 35, 0.8)",
+            padding: "10px 15px",
+            borderRadius: "8px",
+            boxShadow: "0 2px 5px rgba(0, 0, 0, 0.3)",
+          }}
+        >
+          <span 
+            style={{ 
+              color: "white", 
+              marginRight: "10px",
+              fontSize: "14px",
+              fontWeight: "bold",
+            }}
+          >
+            {animationEnabled ? "Animation ON" : "Animation OFF"}
+          </span>
+          
+          {/* Toggle Switch */}
+          <div
+            onClick={() => {
+              // เปลี่ยน state ก่อน
+              const newState = !animationEnabled;
+              setAnimationEnabled(newState);
+              
+              // จากนั้นค่อยสร้าง layer ใหม่และอัพเดต Deck ด้วย state ใหม่
+              const windLayer = createWindLayer({
+                bounds: mapBoundsRef.current,
+                density: 15,
+                lengthScale: 0.5,
+                widthScale: 3,
+                particleCount: 1500,
+                animate: newState,
+                particleSpeed: 0.0075
+              });
+              
+              setLayers([windLayer]);
+              
+              // อัพเดต deck instance ทันทีถ้ามี
+              if (deckRef.current) {
+                deckRef.current.setProps({ layers: [windLayer] });
+              }
+            }}
+            style={{
+              position: "relative",
+              width: "46px",
+              height: "24px",
+              backgroundColor: animationEnabled ? "#4CAF50" : "#ccc",
+              borderRadius: "34px",
+              cursor: "pointer",
+              transition: "background-color 0.3s",
+            }}
+          >
+            {/* ปุ่มเลื่อน */}
+            <div
+              style={{
+                position: "absolute",
+                height: "20px",
+                width: "20px",
+                left: animationEnabled ? "24px" : "2px",
+                bottom: "2px",
+                backgroundColor: "white",
+                borderRadius: "50%",
+                transition: "left 0.3s",
+                boxShadow: "0 1px 3px rgba(0, 0, 0, 0.3)",
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* คอนเทนเนอร์แผนที่หลัก */}

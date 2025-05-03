@@ -205,9 +205,56 @@ class WindParticleLayer extends CompositeLayer {
   
   renderLayers() {
     const { particles } = this.state;
-    const { widthScale = 3, lengthScale = 0.5 } = this.props;
+    const { widthScale = 3, lengthScale = 0.5, animate } = this.props;
     
-    // สร้างเลเยอร์จากอนุภาค
+    // เมื่อ animation ถูกปิด ให้แสดงลูกศรทิศทางลมแทน
+    if (!animate) {
+      // ใช้ข้อมูลลมโดยตรงเพื่อแสดงลูกศรทิศทางลม
+      return [
+        new PathLayer({
+          id: `${this.props.id}-wind-arrows`,
+          data: this.state.windData,
+          pickable: false,
+          widthMinPixels: 2.25,
+          getPath: (d: WindPoint) => {
+            const [x, y] = d.position;
+            // คำนวณจุดปลายของลูกศร
+            const length = 0.5; // ความยาวของเส้นลูกศร
+            const endX = x + Math.cos(d.direction) * length;
+            const endY = y + Math.sin(d.direction) * length;
+            
+            // คำนวณจุดสำหรับหัวลูกศร (แก้ไขให้เป็นลูกศรที่ถูกต้อง)
+            const arrowSize = 0.15; // ขนาดของหัวลูกศร
+            const arrowAngle = Math.PI / 6; // มุม 30 องศาสำหรับหัวลูกศร
+            
+            // คำนวณจุดด้านซ้ายของหัวลูกศร (เริ่มจากปลายลูกศร)
+            const leftX = endX - arrowSize * Math.cos(d.direction + arrowAngle);
+            const leftY = endY - arrowSize * Math.sin(d.direction + arrowAngle);
+            
+            // คำนวณจุดด้านขวาของหัวลูกศร (เริ่มจากปลายลูกศร)
+            const rightX = endX - arrowSize * Math.cos(d.direction - arrowAngle);
+            const rightY = endY - arrowSize * Math.sin(d.direction - arrowAngle);
+            
+            // เส้นทางที่สร้างเป็นลูกศรที่ถูกต้อง
+            // จุดเริ่มต้น -> จุดปลาย -> จุดด้านซ้ายของหัวลูกศร -> จุดปลาย -> จุดด้านขวาของหัวลูกศร
+            return [
+              [x, y],          // จุดเริ่มต้น
+              [endX, endY],    // จุดปลาย
+              [leftX, leftY],  // ส่วนด้านซ้ายของหัวลูกศร
+              [endX, endY],    // กลับมาที่จุดปลาย
+              [rightX, rightY] // ส่วนด้านขวาของหัวลูกศร
+            ];
+          },
+          getColor: (d: WindPoint) => {
+            const [r, g, b] = getWindColor(d.speed);
+            return [r, g, b, 200]; // กำหนดความโปร่งใสให้กับเส้นลูกศร
+          },
+          getWidth: (d: WindPoint) => d.speed * 3 + 1, // ความหนาของเส้นตามความเร็วลม
+        })
+      ];
+    }
+    
+    // กรณีเปิด animation แสดงอนุภาคเคลื่อนไหวตามปกติ
     return [
       new ScatterplotLayer({
         id: `${this.props.id}-particles`,
