@@ -17,6 +17,11 @@ export type WindParticle = {
   direction: number;          // ทิศทางการเคลื่อนที่ (หน่วยเป็น radians)
 };
 
+// Type for map object with the required methods
+export type MapWithProjection = {
+  unproject: (point: [number, number]) => { lng: number; lat: number };
+};
+
 // ฟังก์ชันสร้างข้อมูลลมจำลองเป็นกริดบนพื้นที่ที่กำหนด
 export function generateMockWindData(
   bounds: {
@@ -95,7 +100,7 @@ export function generateWindParticles(
   windData: WindPoint[],       // ข้อมูลลมที่จะใช้
   width: number,               // ความกว้างของพื้นที่แสดงผล
   height: number,              // ความสูงของพื้นที่แสดงผล
-  map: any,                    // อ็อบเจกต์แผนที่
+  map: MapWithProjection,      // อ็อบเจกต์แผนที่
   count: number = 1000         // จำนวนอนุภาคที่ต้องการสร้าง
 ): WindParticle[] {
   const particles: WindParticle[] = [];
@@ -149,7 +154,7 @@ export function updateWindParticles(
   windData: WindPoint[],        // ข้อมูลลมสำหรับคำนวณทิศทางและความเร็ว
   width: number,                // ความกว้างของพื้นที่แสดงผล
   height: number,               // ความสูงของพื้นที่แสดงผล
-  map: any                      // อ็อบเจกต์แผนที่
+  map: MapWithProjection        // อ็อบเจกต์แผนที่
 ): WindParticle[] {
   return particles.map(particle => {
     // เคลื่อนที่อนุภาคตามทิศทางและความเร็วของมัน
