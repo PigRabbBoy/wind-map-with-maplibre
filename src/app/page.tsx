@@ -1,12 +1,18 @@
-// หน้าหลักของแอปพลิเคชัน - เรียกใช้คอมโพเนนต์ Map
-import Map from './map';
+// หน้าหลักของแอปพลิเคชัน
+"use client";
 
-// คอมโพเนนต์หน้าหลักแบบ Server Component (เป็นค่าเริ่มต้นใน Next.js app directory)
+import dynamic from 'next/dynamic';
+
+// Import the Map component with dynamic import
+const DynamicMap = dynamic(() => import('./map'), {
+  loading: () => <div style={{ width: '100%', height: '100vh', background: '#000' }}>Loading map...</div>
+});
+
 export default function Home() {
   return (
     <main>
       {/* เรียกใช้คอมโพเนนต์ Map ที่มีการแสดงแผนที่และอนุภาคลม */}
-      <Map />
+      <DynamicMap />
     </main>
   );
 }
