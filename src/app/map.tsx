@@ -20,6 +20,8 @@ import { MapView, MapViewState } from "@deck.gl/core";
 
 // นำเข้าฟังก์ชันสำหรับสร้าง layer แสดงผลข้อมูลลม (จากไฟล์ในโปรเจ็คเดียวกัน)
 import { createWindLayer } from "./WindLayer";
+// นำเข้า WebGLWindLayer สำหรับการแสดงผลลมด้วย GLSL shaders
+import { createWebGLWindLayer } from "./WebGLWindLayer";
 
 // ขอบเขตภูมิภาคเอเชียตะวันออกเฉียงใต้ (South East Asia)
 // กำหนดพิกัดขอบเขตเพื่อจำกัดการแสดงผลและการสร้างอนุภาคเฉพาะในภูมิภาค
@@ -74,9 +76,13 @@ function Map() {
   // สถานะสำหรับควบคุมการเปิด/ปิด animation
   const [animationEnabled, setAnimationEnabled] = useState(true);
 
+  // สถานะสำหรับเลือกประเภทของ layer ที่จะใช้แสดงผล (standard หรือ webgl)
+  const [layerType, setLayerType] = useState<"standard" | "webgl">("standard");
+
   // Refs สำหรับเก็บ layers ทั้งแบบเคลื่อนไหวและแบบคงที่
   const animatedLayerRef = useRef<any>(null);
   const staticLayerRef = useRef<any>(null);
+  const webglLayerRef = useRef<any>(null);
 
   /**
    * อัพเดตเลเยอร์ deck.gl โดยการสลับระหว่าง animated และ static layers
@@ -109,13 +115,37 @@ function Map() {
         });
       }
 
-      // เลือก layer ที่จะแสดงตามสถานะ animationEnabled
-      const activeLayer = animationEnabled
-        ? animatedLayerRef.current
-        : staticLayerRef.current;
+      if (!webglLayerRef.current) {
+        webglLayerRef.current = createWebGLWindLayer({
+          bounds: mapBoundsRef.current,
+          numParticles: 5000,
+          animate: true,
+          fadeOpacity: 0.996,
+          speedFactor: 0.25,
+          dropRate: 0.003,
+          dropRateBump: 0.01,
+        });
+      }
+
+      // เลือก layer ที่จะแสดงตามสถานะ layerType และ animationEnabled
+      let activeLayer;
+
+      if (layerType === "webgl") {
+        // Update animation state for WebGL layer
+        if (webglLayerRef.current) {
+          webglLayerRef.current.props.animate = animationEnabled;
+        }
+        activeLayer = webglLayerRef.current;
+      } else {
+        // Standard layer - choose between animated and static
+        activeLayer = animationEnabled
+          ? animatedLayerRef.current
+          : staticLayerRef.current;
+      }
+
       deckRef.current.setProps({ layers: [activeLayer] });
     }
-  }, [animationEnabled]);
+  }, [animationEnabled, layerType]);
 
   /**
    * ฟังก์ชันอัพเดตขอบเขตแผนที่ที่มองเห็นในปัจจุบัน
@@ -137,6 +167,7 @@ function Map() {
     // รีเซ็ต layer refs เพื่อสร้างใหม่กับขอบเขตที่อัพเดต
     animatedLayerRef.current = null;
     staticLayerRef.current = null;
+    webglLayerRef.current = null;
 
     // อัพเดต deck.gl layers
     updateDeckGLLayers();
@@ -148,22 +179,39 @@ function Map() {
   const initializeDeckGL = useCallback(() => {
     if (!map.current || deckRef.current) return;
 
-    // สร้าง WindLayer ด้วย deck.gl
-    const windLayer = createWindLayer({
-      bounds: mapBoundsRef.current,
-      density: 15,
-      lengthScale: 0.5,
-      widthScale: 4,
-      particleCount: 1200,
-      animate: animationEnabled,
-      particleSpeed: 0.01,
-    });
+    // สร้างเลเยอร์เริ่มต้นตามประเภทที่เลือกไว้
+    let initialLayer;
 
-    // เก็บ layer ในตัวแปรที่เหมาะสม
-    if (animationEnabled) {
-      animatedLayerRef.current = windLayer;
+    if (layerType === "webgl") {
+      webglLayerRef.current = createWebGLWindLayer({
+        bounds: mapBoundsRef.current,
+        numParticles: 5000,
+        animate: animationEnabled,
+        fadeOpacity: 0.996,
+        speedFactor: 0.25,
+        dropRate: 0.003,
+        dropRateBump: 0.01,
+      });
+      initialLayer = webglLayerRef.current;
     } else {
-      staticLayerRef.current = windLayer;
+      // สร้าง WindLayer ด้วย deck.gl
+      const windLayer = createWindLayer({
+        bounds: mapBoundsRef.current,
+        density: 15,
+        lengthScale: 0.5,
+        widthScale: 4,
+        particleCount: 1200,
+        animate: animationEnabled,
+        particleSpeed: 0.01,
+      });
+
+      // เก็บ layer ในตัวแปรที่เหมาะสม
+      if (animationEnabled) {
+        animatedLayerRef.current = windLayer;
+      } else {
+        staticLayerRef.current = windLayer;
+      }
+      initialLayer = windLayer;
     }
 
     // สร้าง DeckGL instance
@@ -197,7 +245,7 @@ function Map() {
         }
       },
       views: [new MapView({ id: "main", repeat: true })],
-      layers: [windLayer],
+      layers: [initialLayer],
       // ซิงค์ข้อมูล MapLibre
       onBeforeRender: () => {
         if (!map.current) return;
@@ -235,7 +283,7 @@ function Map() {
         deckRef.current.setProps({ viewState: viewport });
       }
     });
-  }, []);
+  }, [animationEnabled, layerType]);
 
   /**
    * สร้างและเริ่มต้นแผนที่ MapLibre
@@ -357,7 +405,6 @@ function Map() {
             },
           });
 
-
           // เริ่มต้นให้ deck.gl ทำงาน
           initializeDeckGL();
         })
@@ -418,6 +465,11 @@ function Map() {
     };
   }, [updateMapBounds, initializeDeckGL]);
 
+  // อัพเดตเลเยอร์เมื่อ layerType เปลี่ยนแปลง
+  useEffect(() => {
+    updateDeckGLLayers();
+  }, [layerType, updateDeckGLLayers]);
+
   return (
     <div>
       {/* แถบข้อมูลด้านบน - แสดงพิกัดและระดับการซูม */}
@@ -439,7 +491,7 @@ function Map() {
         {displayInfo.zoom}
       </div>
 
-      {/* ปุ่มเปิด/ปิด Animation แบบ Toggle */}
+      {/* ปุ่มควบคุม Animation และ Layer Type */}
       <div
         style={{
           position: "absolute",
@@ -452,6 +504,7 @@ function Map() {
           alignItems: "flex-start",
         }}
       >
+        {/* ควบคุมการเปิด/ปิด Animation */}
         <div
           style={{
             display: "flex",
@@ -473,13 +526,12 @@ function Map() {
             {animationEnabled ? "Animation ON" : "Animation OFF"}
           </span>
 
-          {/* Toggle Switch */}
+          {/* Toggle Switch สำหรับ Animation */}
           <div
             onClick={() => {
               // เปลี่ยน state การเปิด/ปิด animation
               setAnimationEnabled(!animationEnabled);
-              // อัพเดต layer ที่แสดงอยู่ผ่าน updateDeckGLLayers
-              // ซึ่งจะเลือกใช้ layer ที่เหมาะสมตาม state ใหม่
+              // อัพเดต layer ที่แสดงอยู่
               updateDeckGLLayers();
             }}
             style={{
@@ -507,6 +559,66 @@ function Map() {
               }}
             />
           </div>
+        </div>
+
+        {/* ควบคุมการเลือกประเภทของ Layer */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            backgroundColor: "rgba(35, 35, 35, 0.8)",
+            padding: "10px 15px",
+            borderRadius: "8px",
+            boxShadow: "0 2px 5px rgba(0, 0, 0, 0.3)",
+          }}
+        >
+          <span
+            style={{
+              color: "white",
+              marginRight: "10px",
+              fontSize: "14px",
+              fontWeight: "bold",
+            }}
+          >
+            Layer Type:
+          </span>
+
+          {/* ปุ่มเลือกประเภท Layer แบบ Standard (deck.gl) */}
+          <button
+            onClick={() => setLayerType("standard")}
+            style={{
+              backgroundColor: layerType === "standard" ? "#4CAF50" : "#555",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              padding: "5px 10px",
+              marginRight: "5px",
+              cursor: "pointer",
+              fontSize: "12px",
+              opacity: layerType === "standard" ? 1 : 0.7,
+              transition: "all 0.3s",
+            }}
+          >
+            Standard
+          </button>
+
+          {/* ปุ่มเลือกประเภท Layer แบบ WebGL (GLSL) */}
+          <button
+            onClick={() => setLayerType("webgl")}
+            style={{
+              backgroundColor: layerType === "webgl" ? "#4CAF50" : "#555",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              padding: "5px 10px",
+              cursor: "pointer",
+              fontSize: "12px",
+              opacity: layerType === "webgl" ? 1 : 0.7,
+              transition: "all 0.3s",
+            }}
+          >
+            WebGL
+          </button>
         </div>
       </div>
 
