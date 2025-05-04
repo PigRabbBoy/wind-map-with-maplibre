@@ -1,12 +1,24 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
+// นำเข้าไลบรารีพื้นฐานของ React และฟังก์ชันที่จำเป็น
+// - useRef: สำหรับอ้างอิงถึง DOM element และเก็บค่าที่ไม่ต้องการให้เกิด re-render
+// - useEffect: สำหรับจัดการผลข้างเคียงและการทำงานที่เกี่ยวข้องกับ lifecycle ของคอมโพเนนต์
+// - useState: สำหรับจัดการสถานะภายในคอมโพเนนต์
+// - useCallback: สำหรับ memorize ฟังก์ชันเพื่อป้องกันการสร้างฟังก์ชันใหม่ในทุก render cycle
 import React, { useRef, useEffect, useState, useCallback } from "react";
+
+// นำเข้าไลบรารี MapLibre GL JS สำหรับแสดงผลแผนที่แบบ vector
+// MapLibre เป็นไลบรารีแผนที่โอเพนซอร์สที่แยกตัวออกมาจาก Mapbox GL JS
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-// Import deck.gl libraries
+
+// นำเข้าไลบรารีจาก deck.gl สำหรับการสร้างชั้นข้อมูลแบบพิเศษ (visualization layers)
+// Deck และ MapView เป็นคอมโพเนนต์พื้นฐานสำหรับสร้างการแสดงผลของ deck.gl
 import { Deck } from "@deck.gl/core";
 import { MapView, MapViewState } from "@deck.gl/core";
+
+// นำเข้าฟังก์ชันสำหรับสร้าง layer แสดงผลข้อมูลลม (จากไฟล์ในโปรเจ็คเดียวกัน)
 import { createWindLayer } from "./WindLayer";
 
 // ขอบเขตภูมิภาคเอเชียตะวันออกเฉียงใต้ (South East Asia)
@@ -58,10 +70,10 @@ function Map() {
     lat: INITIAL_LAT,
     zoom: INITIAL_ZOOM,
   });
-  
+
   // สถานะสำหรับควบคุมการเปิด/ปิด animation
   const [animationEnabled, setAnimationEnabled] = useState(true);
-  
+
   // Refs สำหรับเก็บ layers ทั้งแบบเคลื่อนไหวและแบบคงที่
   const animatedLayerRef = useRef<any>(null);
   const staticLayerRef = useRef<any>(null);
@@ -81,10 +93,10 @@ function Map() {
           widthScale: 3,
           particleCount: 1500,
           animate: true,
-          particleSpeed: 0.0075
+          particleSpeed: 0.0075,
         });
       }
-      
+
       if (!staticLayerRef.current) {
         staticLayerRef.current = createWindLayer({
           bounds: mapBoundsRef.current,
@@ -93,12 +105,14 @@ function Map() {
           widthScale: 3,
           particleCount: 1500,
           animate: false,
-          particleSpeed: 0.0075
+          particleSpeed: 0.0075,
         });
       }
-      
+
       // เลือก layer ที่จะแสดงตามสถานะ animationEnabled
-      const activeLayer = animationEnabled ? animatedLayerRef.current : staticLayerRef.current;
+      const activeLayer = animationEnabled
+        ? animatedLayerRef.current
+        : staticLayerRef.current;
       deckRef.current.setProps({ layers: [activeLayer] });
     }
   }, [animationEnabled]);
@@ -139,12 +153,12 @@ function Map() {
       bounds: mapBoundsRef.current,
       density: 15,
       lengthScale: 0.5,
-      widthScale: 3,
-      particleCount: 1500,
+      widthScale: 4,
+      particleCount: 1200,
       animate: animationEnabled,
-      particleSpeed: 0.0075
+      particleSpeed: 0.01,
     });
-    
+
     // เก็บ layer ในตัวแปรที่เหมาะสม
     if (animationEnabled) {
       animatedLayerRef.current = windLayer;
@@ -159,19 +173,21 @@ function Map() {
       height: "100%",
       controller: false, // ไม่ใช้ตัวควบคุมของ deck.gl (ใช้ของ MapLibre แทน)
       initialViewState: {
-        main: {  // Use a view ID key
+        main: {
+          // Use a view ID key
           longitude: INITIAL_LNG,
           latitude: INITIAL_LAT,
           zoom: INITIAL_ZOOM,
           pitch: 0,
           bearing: 0,
-        }
+        },
       },
-      onViewStateChange: ({viewState}) => {
+      onViewStateChange: ({ viewState }) => {
         // ซิงค์มุมมองกับ MapLibre
         if (map.current) {
           // Access the correct viewState properties based on the structure
-          const { longitude, latitude, zoom, pitch, bearing } = viewState as MapViewState;
+          const { longitude, latitude, zoom, pitch, bearing } =
+            viewState as MapViewState;
           map.current.jumpTo({
             center: [longitude, latitude],
             zoom,
@@ -180,7 +196,7 @@ function Map() {
           });
         }
       },
-      views: [new MapView({ id: 'main', repeat: true })],
+      views: [new MapView({ id: "main", repeat: true })],
       layers: [windLayer],
       // ซิงค์ข้อมูล MapLibre
       onBeforeRender: () => {
@@ -193,7 +209,7 @@ function Map() {
             zoom: map.current.getZoom(),
             bearing: map.current.getBearing(),
             pitch: map.current.getPitch(),
-          }
+          },
         };
 
         if (deckRef.current) {
@@ -213,14 +229,13 @@ function Map() {
             zoom: map.current.getZoom(),
             bearing: map.current.getBearing(),
             pitch: map.current.getPitch(),
-          }
+          },
         };
 
         deckRef.current.setProps({ viewState: viewport });
       }
     });
-  // แก้ไข dependency ไม่ให้มี animationEnabled เพื่อป้องกัน reload เมื่อกดปุ่ม
-  }, [/* ลบ animationEnabled ออกจาก dependency */]);
+  }, []);
 
   /**
    * สร้างและเริ่มต้นแผนที่ MapLibre
@@ -244,14 +259,11 @@ function Map() {
             },
           },
         ],
-        // เพิ่มคุณสมบัติ glyphs เพื่อรองรับการแสดงข้อความ
-        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
       },
       center: [INITIAL_LNG, INITIAL_LAT], // ใช้ค่าคงที่แทน state ที่เปลี่ยนแปลง
       zoom: INITIAL_ZOOM, // ใช้ค่าคงที่แทน state ที่เปลี่ยนแปลง
       maxZoom: 18, // ระดับการซูมสูงสุด
       attributionControl: false, // ไม่แสดงข้อความอ้างอิงแหล่งที่มา
-      // ไม่จำกัดขอบเขตการเคลื่อนที่ของแผนที่ เพื่อให้เลื่อนได้ทั่วโลก
     });
 
     // ตั้งค่า event handlers สำหรับการอัพเดตตำแหน่งแผนที่
@@ -274,13 +286,9 @@ function Map() {
       )
         .then((response) => response.json())
         .then((data) => {
-          // กรองเฉพาะประเทศในเอเชียตะวันออกเฉียงใต้
           const filteredData = {
             type: "FeatureCollection" as const,
-            features: data.features.filter(() => {
-              // แสดงทุกประเทศทั่วโลก แต่เน้นประเทศในเอเชียตะวันออกเฉียงใต้
-              return true;
-            }),
+            features: data.features,
           };
 
           // เพิ่มแหล่งข้อมูลประเทศ
@@ -349,31 +357,6 @@ function Map() {
             },
           });
 
-          // เพิ่มชื่อประเทศในเอเชียตะวันออกเฉียงใต้
-          map.current!.addLayer({
-            id: "country-labels",
-            type: "symbol",
-            source: "countries",
-            layout: {
-              "text-field": ["get", "ADMIN"], // ใช้ชื่อประเทศจากคุณสมบัติ ADMIN
-              "text-font": ["Open Sans Regular"],
-              "text-size": 12,
-              "text-allow-overlap": false, // ไม่ให้ข้อความทับซ้อนกัน
-              "text-ignore-placement": false,
-              "text-optional": true, // ข้อความเป็นตัวเลือก (สามารถไม่แสดงได้ถ้าไม่มีพื้นที่)
-            },
-            paint: {
-              "text-color": "#ffffff", // สีข้อความ - ขาว
-              "text-halo-color": "#000000", // สีขอบข้อความ - ดำ
-              "text-halo-width": 1, // ความหนาของขอบข้อความ
-            },
-            // กรองให้แสดงเฉพาะชื่อประเทศในเอเชียตะวันออกเฉียงใต้
-            filter: [
-              "in",
-              ["get", "ISO_A3"],
-              ["literal", SOUTHEAST_ASIA_COUNTRIES],
-            ],
-          });
 
           // เริ่มต้นให้ deck.gl ทำงาน
           initializeDeckGL();
@@ -452,7 +435,8 @@ function Map() {
           fontFamily: "monospace", // รูปแบบตัวอักษร
         }}
       >
-        Longitude: {displayInfo.lng} | Latitude: {displayInfo.lat} | Zoom: {displayInfo.zoom}
+        Longitude: {displayInfo.lng} | Latitude: {displayInfo.lat} | Zoom:{" "}
+        {displayInfo.zoom}
       </div>
 
       {/* ปุ่มเปิด/ปิด Animation แบบ Toggle */}
@@ -468,7 +452,7 @@ function Map() {
           alignItems: "flex-start",
         }}
       >
-        <div 
+        <div
           style={{
             display: "flex",
             alignItems: "center",
@@ -478,9 +462,9 @@ function Map() {
             boxShadow: "0 2px 5px rgba(0, 0, 0, 0.3)",
           }}
         >
-          <span 
-            style={{ 
-              color: "white", 
+          <span
+            style={{
+              color: "white",
               marginRight: "10px",
               fontSize: "14px",
               fontWeight: "bold",
@@ -488,7 +472,7 @@ function Map() {
           >
             {animationEnabled ? "Animation ON" : "Animation OFF"}
           </span>
-          
+
           {/* Toggle Switch */}
           <div
             onClick={() => {
