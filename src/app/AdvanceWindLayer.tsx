@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import {
@@ -7,6 +9,7 @@ import {
   LayerContext,
 } from "@deck.gl/core";
 import { Buffer, Texture } from "@luma.gl/core";
+import { generateMockWindData } from '../data/mockWindData';
 
 // Define shader code as string constants instead of importing from files
 const drawVertShader = `precision mediump float;
@@ -168,8 +171,8 @@ export type WindDataType = {
   image: Uint8Array;
 };
 
-// Props for WebGLWindLayer
-type WebGLWindLayerProps = {
+// Props for AdvanceWindLayer
+type AdvanceWindLayerProps = {
   id: string;
   bounds: {
     west: number;
@@ -188,10 +191,10 @@ type WebGLWindLayerProps = {
 } & LayerProps;
 
 /**
- * WebGLWindLayer - A custom deck.gl layer that renders wind particles
+ * AdvanceWindLayer - A custom deck.gl layer that renders wind particles
  * using direct WebGL/GLSL implementation via luma.gl
  */
-export default class WebGLWindLayer extends Layer<WebGLWindLayerProps> {
+export default class AdvanceWindLayer extends Layer<AdvanceWindLayerProps> {
   // Define defaultProps
   static defaultProps = {
     fadeOpacity: 0.996,
@@ -207,17 +210,17 @@ export default class WebGLWindLayer extends Layer<WebGLWindLayerProps> {
   drawProgram: any;
   screenProgram: any;
   updateProgram: any;
-  quadBuffer: Buffer | null = null;
+  quadBuffer: WebGLBuffer | null = null;
   framebuffer: WebGLFramebuffer | null = null;
-  colorRampTexture: Texture | null = null;
-  backgroundTexture: Texture | null = null;
-  screenTexture: Texture | null = null;
-  particleStateTexture0: Texture | null = null;
-  particleStateTexture1: Texture | null = null;
-  particleIndexBuffer: Buffer | null = null;
+  colorRampTexture: WebGLTexture | null = null;
+  backgroundTexture: WebGLTexture | null = null;
+  screenTexture: WebGLTexture | null = null;
+  particleStateTexture0: WebGLTexture | null = null;
+  particleStateTexture1: WebGLTexture | null = null;
+  particleIndexBuffer: WebGLBuffer | null = null;
   particleStateResolution: number = 0;
   _numParticles: number = 0;
-  windTexture: Texture | null = null;
+  windTexture: WebGLTexture | null = null;
   windData: WindDataType | null = null;
   animationFrame: number | null = null;
 
@@ -278,15 +281,15 @@ export default class WebGLWindLayer extends Layer<WebGLWindLayerProps> {
   }
 
   shouldUpdateState(params: UpdateParameters<this>): boolean {
-    return (
-      params.changeFlags.propsChanged ||
-      params.changeFlags.viewportChanged ||
-      params.changeFlags.dataChanged
-    );
+    const { changeFlags } = params;
+    // Update when props change, viewport changes, or data changes
+    return Boolean(changeFlags.propsChanged) || 
+           Boolean(changeFlags.viewportChanged) || 
+           Boolean(changeFlags.dataChanged);
   }
 
-  updateState({ props, oldProps, changeFlags }: UpdateParameters<this>) {
-    super.updateState({ props, oldProps, changeFlags });
+  updateState({ props, oldProps, changeFlags, context }: UpdateParameters<this>) {
+    super.updateState({ props, oldProps, changeFlags, context });
 
     // Handle prop changes
     if (props.numParticles !== oldProps.numParticles && props.numParticles) {
@@ -509,6 +512,10 @@ export default class WebGLWindLayer extends Layer<WebGLWindLayerProps> {
     east: number;
     north: number;
   }): WindDataType {
+    // ใช้ฟังก์ชัน generateMockWindData จาก mockWindData.ts
+    const windPoints = generateMockWindData(bounds, 30); // ความละเอียด 30x30
+    
+    // แปลงข้อมูลจาก WindPoint[] เป็นรูปแบบ WindDataType ที่เข้ากับ AdvanceWindLayer
     const width = 360;
     const height = 180;
     const data = new Uint8Array(width * height * 4);
@@ -518,30 +525,47 @@ export default class WebGLWindLayer extends Layer<WebGLWindLayerProps> {
     let vMin = Infinity;
     let vMax = -Infinity;
 
-    // Generate wind data
+    // สร้าง lookup grid เพื่อคำนวณตำแหน่งของจุดลม
+    const grid: Array<Array<{u: number, v: number}>> = Array(height).fill(0).map(() => 
+      Array(width).fill(null).map(() => ({ u: 0, v: 0 }))
+    );
+
+    // แปลงข้อมูลจาก WindPoint เป็นค่า u และ v components
+    windPoints.forEach(point => {
+      // แปลงจากพิกัดภูมิศาสตร์เป็นพิกัด grid
+      const x = Math.floor((point.position[0] + 180) * (width / 360));
+      const y = Math.floor((point.position[1] + 90) * (height / 180));
+      
+      // คำนวณ u,v components จาก direction และ speed
+      const u = Math.cos(point.direction) * point.speed;
+      const v = Math.sin(point.direction) * point.speed;
+      
+      // เก็บค่าในตำแหน่งที่เหมาะสม
+      if (x >= 0 && x < width && y >= 0 && y < height) {
+        grid[y][x] = { u, v };
+        
+        // อัพเดต min/max
+        uMin = Math.min(uMin, u);
+        uMax = Math.max(uMax, u);
+        vMin = Math.min(vMin, v);
+        vMax = Math.max(vMax, v);
+      }
+    });
+
+    // เติมข้อมูลในส่วนที่ไม่มีข้อมูล (interpolation)
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        // Convert pixel position to geographic coordinates
-        const lng = (x / width) * 360 - 180;
-        const lat = (y / height) * 180 - 90;
-
-        // Generate wind vectors using a simple wave pattern
-        const uComp = Math.sin(lat * 0.05) * Math.cos(lng * 0.05);
-        const vComp = Math.cos(lat * 0.05) * Math.sin(lng * 0.05);
-
-        // Update min/max
-        uMin = Math.min(uMin, uComp);
-        uMax = Math.max(uMax, uComp);
-        vMin = Math.min(vMin, vComp);
-        vMax = Math.max(vMax, vComp);
-
-        // Encode wind vectors in RGBA
+        // คำนวณค่า u, v ที่จุด (x, y) ถ้ายังไม่ได้กำหนด
+        const uComp = grid[y][x].u;
+        const vComp = grid[y][x].v;
+        
+        // เข้ารหัส wind vectors เป็น RGBA
         const i = (y * width + x) * 4;
-        // R and G channels contain the u component
+        // R และ G channels เก็บค่า u component
         data[i] = Math.floor((uComp + 1) * 127.5); // R: integer part
         data[i + 1] = Math.floor((((uComp + 1) * 127.5) % 1) * 255); // G: fraction part
 
-        // B and A channels contain the v component
+        // B และ A channels เก็บค่า v component
         data[i + 2] = Math.floor((vComp + 1) * 127.5); // B: integer part
         data[i + 3] = Math.floor((((vComp + 1) * 127.5) % 1) * 255); // A: fraction part
       }
@@ -693,10 +717,10 @@ export default class WebGLWindLayer extends Layer<WebGLWindLayerProps> {
   }
 
   // Draw a texture to the screen
-  drawTexture(texture: Texture, opacity: number) {
+  drawTexture(texture: WebGLTexture | null, opacity: number) {
     const gl = this.context.gl;
     const program = this.screenProgram;
-    if (!program || !this.quadBuffer) return;
+    if (!program || !this.quadBuffer || !texture) return;
 
     gl.useProgram(program.program);
 
@@ -834,9 +858,9 @@ export default class WebGLWindLayer extends Layer<WebGLWindLayerProps> {
 }
 
 // Helper function to create a wind layer instance
-export function createWebGLWindLayer(props: Omit<WebGLWindLayerProps, "id">) {
-  return new WebGLWindLayer({
-    id: "webgl-wind-layer",
+export function createAdvanceWindLayer(props: Omit<AdvanceWindLayerProps, "id">) {
+  return new AdvanceWindLayer({
+    id: "advance-wind-layer",
     ...props,
   });
 }

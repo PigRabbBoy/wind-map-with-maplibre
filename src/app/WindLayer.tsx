@@ -1,44 +1,44 @@
 "use client";
 
-// นำเข้าคอมโพเนนต์และฟังก์ชันที่จำเป็นจาก React
-// - useMemo: ใช้เพื่อจดจำค่าที่คำนวณแล้วและป้องกันการคำนวณซ้ำในทุกรอบการเรนเดอร์
+// Import components and functions needed from React
+// - useMemo: Used to memoize calculated values and prevent recalculation on each render
 import React, { useMemo } from 'react';
 
-// นำเข้าเลเยอร์พื้นฐานจาก deck.gl ที่จะใช้แสดงอนุภาคลม
-// - PathLayer: ใช้สำหรับวาดเส้นแสดงทิศทางลมและหางของอนุภาค
-// - ScatterplotLayer: ใช้สำหรับวาดจุดแสดงตำแหน่งปัจจุบันของอนุภาค
+// Import base layers from deck.gl that will be used to display wind particles
+// - PathLayer: Used for drawing lines showing wind direction and particle trails
+// - ScatterplotLayer: Used for drawing points showing current particle positions
 import { PathLayer, ScatterplotLayer } from '@deck.gl/layers';
 
-// นำเข้าคลาสและประเภทข้อมูลสำหรับสร้างเลเยอร์แบบ composite จาก deck.gl
-// - CompositeLayer: คลาสสำหรับสร้างเลเยอร์ที่ประกอบด้วยเลเยอร์ย่อยหลายตัว
-// - CompositeLayerProps: ประเภทข้อมูลสำหรับคุณสมบัติของ CompositeLayer
-// - Layer: คลาสพื้นฐานของทุกเลเยอร์
-// - UpdateParameters: ประเภทข้อมูลสำหรับพารามิเตอร์ที่ใช้ในการอัพเดตเลเยอร์
+// Import classes and types for creating composite layers from deck.gl
+// - CompositeLayer: Class for creating layers composed of multiple sub-layers
+// - CompositeLayerProps: Type for CompositeLayer properties
+// - Layer: Base class for all layers
+// - UpdateParameters: Type for parameters used in layer updates
 import { CompositeLayer, CompositeLayerProps, Layer, UpdateParameters } from '@deck.gl/core';
 
-// นำเข้าฟังก์ชันและประเภทข้อมูลสำหรับการจัดการข้อมูลลมจำลอง
-// - generateMockWindData: ฟังก์ชันสร้างข้อมูลลมจำลองตามขอบเขตที่กำหนด
-// - getWindColor: ฟังก์ชันสำหรับแปลงความเร็วลมเป็นสีที่เหมาะสม
-// - WindPoint: ประเภทข้อมูลสำหรับจุดข้อมูลลมแต่ละจุด
+// Import functions and types for handling mock wind data
+// - generateMockWindData: Function to generate mock wind data for a specified area
+// - getWindColor: Function to convert wind speed to appropriate color
+// - WindPoint: Type for individual wind data points
 import { generateMockWindData, getWindColor, WindPoint } from '../data/mockWindData';
 
-// กำหนด props สำหรับคอมโพเนนต์ WindLayer - เป็นพารามิเตอร์ที่ใช้ในการกำหนดลักษณะการแสดงผลของชั้นข้อมูลลม
+// Define props for the WindLayer component - parameters used to customize the wind data display
 type WindLayerProps = {
   bounds: {
-    west: number;    // ขอบเขตด้านตะวันตกของพื้นที่ (longitude) - เส้นลองจิจูดที่เป็นขอบซ้ายสุด
-    south: number;   // ขอบเขตด้านใต้ของพื้นที่ (latitude) - เส้นละติจูดที่เป็นขอบล่างสุด
-    east: number;    // ขอบเขตด้านตะวันออกของพื้นที่ (longitude) - เส้นลองจิจูดที่เป็นขอบขวาสุด
-    north: number;   // ขอบเขตด้านเหนือของพื้นที่ (latitude) - เส้นละติจูดที่เป็นขอบบนสุด
+    west: number;    // Western boundary of area (longitude) - the leftmost longitude
+    south: number;   // Southern boundary of area (latitude) - the bottom latitude
+    east: number;    // Eastern boundary of area (longitude) - the rightmost longitude
+    north: number;   // Northern boundary of area (latitude) - the top latitude
   };
-  density?: number;   // ความหนาแน่นของจุดลม (จำนวนจุดต่อแกน) - ยิ่งมากยิ่งละเอียด แต่ประมวลผลหนักขึ้น
-  lengthScale?: number;  // ค่าปรับขนาดความยาวของลูกศรลม - ควบคุมความยาวของเส้นที่แสดงทิศทางลม
-  widthScale?: number;   // ค่าปรับขนาดความกว้างของลูกศรลม - ควบคุมความหนาของเส้นที่แสดงทิศทางลม
-  particleCount?: number; // จำนวนอนุภาคที่ใช้ในการแสดงผล - กำหนดจำนวนอนุภาคที่จะแสดงบนแผนที่
-  animate?: boolean;  // เปิด/ปิดการเคลื่อนไหว - ควบคุมว่าจะแสดงเป็นแบบเคลื่อนไหวหรือแบบคงที่
-  particleSpeed?: number; // ความเร็วของอนุภาค - กำหนดความเร็วในการเคลื่อนที่ของอนุภาคลม
+  density?: number;   // Density of wind points (points per axis) - higher means more detailed but heavier processing
+  lengthScale?: number;  // Wind arrow length scale factor - controls the length of lines showing wind direction
+  widthScale?: number;   // Wind arrow width scale factor - controls the thickness of lines showing wind direction
+  particleCount?: number; // Number of particles used in visualization - defines how many particles appear on the map
+  animate?: boolean;  // Enable/disable animation - controls whether to show animation or static view
+  particleSpeed?: number; // Particle speed - controls how fast particles move
 };
 
-// กำหนด props สำหรับเลเยอร์ WindParticleLayer ซึ่งเป็นเลเยอร์แบบ Composite ที่สร้างขึ้นเองสำหรับแสดงอนุภาคลม
+// Define props for the WindParticleLayer which is a custom Composite layer for showing wind particles
 type WindParticleLayerProps = {
   bounds: {
     west: number;
@@ -52,94 +52,94 @@ type WindParticleLayerProps = {
   particleCount?: number;
   animate?: boolean;
   particleSpeed?: number;
-  id?: string;  // ค่า id ที่ใช้ระบุตัวตนของเลเยอร์ ต้องไม่ซ้ำกับเลเยอร์อื่นใน deck.gl
+  id?: string;  // ID value to identify the layer, must be unique among other layers in deck.gl
 };
 
-// กำหนดประเภทข้อมูลสำหรับอนุภาคลมแต่ละอนุภาค เพื่อใช้ในการเก็บข้อมูลและแสดงผลการเคลื่อนไหว
+// Define type for each wind particle to store data and display animation
 type ParticleType = {
-  position: [number, number]; // ตำแหน่งปัจจุบัน [longitude, latitude] บนแผนที่
-  direction: number;         // ทิศทางการเคลื่อนที่ (หน่วยเป็น radians) โดยที่ 0 คือทิศตะวันออก และเพิ่มตามเข็มนาฬิกา
-  speed: number;             // ความเร็วการเคลื่อนที่ (ค่าสัมพัทธ์ ไม่ใช่หน่วย SI)
-  age: number;               // อายุปัจจุบันของอนุภาค (นับเป็นจำนวนเฟรม)
-  maxAge: number;            // อายุสูงสุดของอนุภาคก่อนที่จะถูกสร้างใหม่ (นับเป็นจำนวนเฟรม)
-  size: number;              // ขนาดของอนุภาค (หน่วยเป็นพิกเซล)
-  color: [number, number, number, number]; // สี RGBA (แต่ละค่าเป็นช่วง 0-255)
+  position: [number, number]; // Current position [longitude, latitude] on the map
+  direction: number;         // Movement direction (in radians) where 0 is east and increases clockwise
+  speed: number;             // Movement speed (relative value, not SI units)
+  age: number;               // Current age of particle (counted in frames)
+  maxAge: number;            // Maximum age of particle before it's recreated (counted in frames)
+  size: number;              // Particle size (in pixels)
+  color: [number, number, number, number]; // RGBA color (each value in 0-255 range)
 };
 
-// สร้างเลเยอร์แบบ Composite ที่กำหนดเองสำหรับแสดงอนุภาคลม
-// CompositeLayer เป็นคลาสฐานจาก deck.gl ที่ช่วยให้สร้างเลเยอร์ที่ประกอบด้วยเลเยอร์ย่อยหลายตัวได้
+// Create a custom Composite layer for displaying wind particles
+// CompositeLayer is a base class from deck.gl that allows creating layers composed of multiple sub-layers
 class WindParticleLayer extends CompositeLayer<WindParticleLayerProps> {
-  static layerName = 'WindParticleLayer';  // กำหนดชื่อของเลเยอร์เพื่อการอ้างอิง
+  static layerName = 'WindParticleLayer';  // Define layer name for reference
   static defaultProps = {
-    particleCount: 1000,  // จำนวนอนุภาคเริ่มต้น 1000 อนุภาค
-    animate: true,        // เปิดการเคลื่อนไหวเป็นค่าเริ่มต้น
-    particleSpeed: 0.02,  // ความเร็วของอนุภาคเริ่มต้น
-    fadeOpacity: 0.996,   // ค่าการจางหายของการเคลื่อนไหว (ยิ่งมากยิ่งหายช้า)
+    particleCount: 1000,  // Default 1000 particles
+    animate: true,        // Animation enabled by default
+    particleSpeed: 0.02,  // Default particle speed
+    fadeOpacity: 0.996,   // Fade rate for animation (higher = slower fade)
   };
 
-  // ประกาศตัวแปรสำหรับเก็บ ID ของ animation frame เพื่อใช้ในการยกเลิกแอนิเมชันเมื่อไม่ต้องการ
+  // Declare variable for animation frame ID to use for canceling animation when needed
   animationFrame: number | null = null;
 
-  // กำหนดสถานะเริ่มต้นของเลเยอร์
+  // Define initial state of layer
   state = {
-    particles: [] as ParticleType[],  // อาร์เรย์เก็บอนุภาคทั้งหมด
-    timestamp: 0,                      // เวลาปัจจุบัน ใช้สำหรับ trigger การอัพเดต
-    windData: [] as WindPoint[],       // ข้อมูลลม ที่ได้จากการสร้างจำลอง
+    particles: [] as ParticleType[],  // Array to store all particles
+    timestamp: 0,                      // Current time, used to trigger updates
+    windData: [] as WindPoint[],       // Wind data from simulation
   };
 
-  // ฟังก์ชันที่จะถูกเรียกเมื่อเริ่มต้นสร้างเลเยอร์
+  // Function called when layer is initially created
   initializeState() {
-    // สร้างข้อมูลลมจำลองและอนุภาคเมื่อเริ่มต้น
+    // Create mock wind data and particles when initialized
     const { bounds, density = 20 } = this.props;
-    const windData = generateMockWindData(bounds, density); // สร้างข้อมูลลมจำลองตามขอบเขตและความหนาแน่นที่กำหนด
+    const windData = generateMockWindData(bounds, density); // Generate mock wind data based on bounds and density
     this.setState({ 
-      windData,  // เก็บข้อมูลลมที่สร้างไว้ในสถานะ
-      particles: this.generateParticles(windData)  // สร้างและเก็บอนุภาคตามข้อมูลลมที่สร้างขึ้น
+      windData,  // Store generated wind data in state
+      particles: this.generateParticles(windData)  // Generate and store particles based on wind data
     });
     
-    // ตั้งค่า animation loop โดยใช้ requestAnimationFrame ของเบราว์เซอร์
+    // Set up animation loop using browser's requestAnimationFrame
     this.animationFrame = window.requestAnimationFrame(this.animate.bind(this));
   }
 
-  // ฟังก์ชันที่จะถูกเรียกเมื่อต้องการทำลายเลเยอร์
+  // Function called when layer is being destroyed
   finalizeState() {
-    // ยกเลิกการทำงานของ animation loop ถ้ามีการทำงานอยู่
+    // Cancel animation loop if it's running
     if (this.animationFrame) {
       window.cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
     }
   }
 
-  // ฟังก์ชันตัดสินใจว่าจะต้องอัพเดตสถานะของเลเยอร์หรือไม่
+  // Function to decide whether to update layer state
   shouldUpdateState(params: UpdateParameters<Layer<WindParticleLayerProps & Required<CompositeLayerProps>>>) {
     const { changeFlags } = params;
-    // อัพเดตเมื่อ props เปลี่ยน หรือ viewport เปลี่ยน หรือข้อมูลเปลี่ยน
+    // Update when props change, viewport changes, or data changes
     return Boolean(changeFlags.propsChanged) || 
            Boolean(changeFlags.viewportChanged) || 
            Boolean(changeFlags.dataChanged);
   }
   
-  // สร้างอนุภาคลมในบริเวณที่กำหนดตามข้อมูลลม
+  // Generate wind particles in specified area based on wind data
   generateParticles(windData: WindPoint[]) {
-    const { particleCount = 1000 } = this.props;  // รับค่าจำนวนอนุภาคที่ต้องการ หรือใช้ค่าเริ่มต้น 1000
-    const { bounds } = this.props;  // ขอบเขตพื้นที่ที่จะสร้างอนุภาค
+    const { particleCount = 1000 } = this.props;  // Get desired number of particles or use default 1000
+    const { bounds } = this.props;  // Get bounds of area to create particles in
     
-    const particles: ParticleType[] = [];  // อาร์เรย์เก็บอนุภาคที่สร้าง
+    const particles: ParticleType[] = [];  // Array to store created particles
     
-    // สร้างอนุภาคตามจำนวนที่กำหนด
+    // Create particles based on specified count
     for (let i = 0; i < particleCount; i++) {
-      // สุ่มตำแหน่งภายในขอบเขตที่กำหนด
+      // Generate random position within specified bounds
       const longitude = bounds.west + Math.random() * (bounds.east - bounds.west);
       const latitude = bounds.south + Math.random() * (bounds.north - bounds.south);
       
-      // หาข้อมูลลมที่ใกล้ตำแหน่งที่สุดเพื่อกำหนดทิศทางและความเร็วของอนุภาค
+      // Find closest wind data point to determine direction and speed of particle
       let closestWindPoint = windData[0];
       let minDistance = Number.MAX_VALUE;
       
       for (const point of windData) {
         const dx = point.position[0] - longitude;
         const dy = point.position[1] - latitude;
-        const distance = dx * dx + dy * dy;  // คำนวณระยะทางแบบพีทาโกรัสโดยไม่ต้องถอดรูท (เพื่อความเร็ว)
+        const distance = dx * dx + dy * dy;  // Calculate distance with Pythagoras without square root (for speed)
         
         if (distance < minDistance) {
           minDistance = distance;
@@ -147,20 +147,20 @@ class WindParticleLayer extends CompositeLayer<WindParticleLayerProps> {
         }
       }
       
-      // สุ่มอายุอนุภาคเพื่อให้อนุภาคที่สร้างมีการเกิดใหม่ไม่พร้อมกัน
-      const maxAge = 50 + Math.random() * 50;  // อายุสูงสุดระหว่าง 50-100 เฟรม
+      // Randomize particle age to make particle creation staggered
+      const maxAge = 50 + Math.random() * 50;  // Maximum age between 50-100 frames
       
-      // กำหนดสีตามความเร็วลม และเพิ่มค่า alpha เป็น 200 (จาก 255)
+      // Set color based on wind speed with alpha of 200 (out of 255)
       const color = [...getWindColor(closestWindPoint.speed), 200] as [number, number, number, number];
       
-      // เพิ่มอนุภาคใหม่เข้าไปในอาร์เรย์
+      // Add new particle to the array
       particles.push({
         position: [longitude, latitude],
         direction: closestWindPoint.direction,
         speed: closestWindPoint.speed,
-        age: Math.random() * maxAge,  // เริ่มต้นด้วยอายุที่สุ่มเพื่อกระจายการเกิดใหม่
+        age: Math.random() * maxAge,  // Start with random age to stagger renewals
         maxAge,
-        size: 6 + closestWindPoint.speed * 15, // ขนาดอนุภาคแปรผันตามความเร็วลม (ลดขนาด 50% จาก 12+speed*30)
+        size: 6 + closestWindPoint.speed * 15, // Particle size varies with wind speed (reduced 50% from 12+speed*30)
         color
       });
     }
@@ -168,26 +168,26 @@ class WindParticleLayer extends CompositeLayer<WindParticleLayerProps> {
     return particles;
   }
   
-  // อัพเดตการเคลื่อนที่ของอนุภาคตามทิศทางและความเร็วลม
+  // Update particle movement based on wind direction and speed
   updateParticles() {
-    const { animate, particleSpeed = 0.0075, bounds } = this.props; // ลดความเร็วลง 50% จาก 0.015 เป็น 0.0075
+    const { animate, particleSpeed = 0.0075, bounds } = this.props; // Reduced speed 50% from 0.015 to 0.0075
     const { particles, windData } = this.state;
     
-    // ถ้าปิดการเคลื่อนไหวหรือไม่มีอนุภาค ให้คืนค่าอนุภาคเดิม
+    // If animation is off or no particles exist, return original particles
     if (!animate || particles.length === 0) return particles;
     
-    // อัพเดตแต่ละอนุภาค
+    // Update each particle
     return particles.map(particle => {
-      // เพิ่มอายุอนุภาคทุกครั้งที่อัพเดต
+      // Increase particle age with each update
       particle.age += 1;
       
-      // ถ้าอนุภาคหมดอายุ (อายุถึงค่าสูงสุด) ให้สร้างอนุภาคใหม่
+      // If particle has reached maximum age, create a new one
       if (particle.age >= particle.maxAge) {
-        // สุ่มตำแหน่งใหม่ภายในขอบเขต
+        // Generate random position within bounds
         const longitude = bounds.west + Math.random() * (bounds.east - bounds.west);
         const latitude = bounds.south + Math.random() * (bounds.north - bounds.south);
         
-        // หาข้อมูลลมที่ใกล้ตำแหน่งใหม่ที่สุด
+        // Find closest wind point to new position
         let closestWindPoint = windData[0];
         let minDistance = Number.MAX_VALUE;
         
@@ -202,39 +202,39 @@ class WindParticleLayer extends CompositeLayer<WindParticleLayerProps> {
           }
         }
         
-        // กำหนดอายุสูงสุดและสีใหม่
+        // Set new maximum age and color
         const maxAge = 50 + Math.random() * 50;
         const color = [...getWindColor(closestWindPoint.speed), 200] as [number, number, number, number];
         
-        // คืนค่าอนุภาคใหม่
+        // Return new particle
         return {
           position: [longitude, latitude],
           direction: closestWindPoint.direction,
           speed: closestWindPoint.speed,
-          age: 0,  // เริ่มนับอายุใหม่จาก 0
+          age: 0,  // Reset age to 0
           maxAge,
-          size: 6 + closestWindPoint.speed * 15, // ขนาดตามความเร็วลม (ลดลง 50% จาก 12+speed*30)
+          size: 6 + closestWindPoint.speed * 15, // Size based on wind speed (reduced 50% from 12+speed*30)
           color
         };
       } else {
-        // เคลื่อนที่อนุภาคตามทิศทางและความเร็ว
-        const speed = particle.speed * particleSpeed;  // ปรับความเร็วตาม particleSpeed
-        // คำนวณตำแหน่งใหม่ด้วยฟังก์ชัน cos/sin และความเร็ว
+        // Move particle based on direction and speed
+        const speed = particle.speed * particleSpeed;  // Adjust speed with particleSpeed parameter
+        // Calculate new position using cos/sin and speed
         const x = particle.position[0] + Math.cos(particle.direction) * speed;
         const y = particle.position[1] + Math.sin(particle.direction) * speed;
         
-        // ตรวจสอบว่าอนุภาคยังอยู่ในขอบเขตหรือไม่
+        // Check if particle is still within bounds
         if (x < bounds.west || x > bounds.east || y < bounds.south || y > bounds.north) {
-          // ถ้าออกนอกขอบเขต ให้รีเซ็ตอายุเพื่อสร้างใหม่ในรอบถัดไป
+          // If out of bounds, set age to maximum to create a new one in next frame
           particle.age = particle.maxAge;
           return particle;
         }
         
-        // อัพเดตค่าความโปร่งใสตามอายุ - ยิ่งอายุมากยิ่งจางลง
+        // Update transparency based on age - older particles become more transparent
         const opacityFactor = 1 - particle.age / particle.maxAge;
         particle.color[3] = 200 * opacityFactor;
         
-        // อัพเดตตำแหน่งอนุภาค
+        // Update particle position
         particle.position = [x, y];
         
         return particle;
@@ -242,118 +242,118 @@ class WindParticleLayer extends CompositeLayer<WindParticleLayerProps> {
     });
   }
   
-  // ฟังก์ชันที่ทำงานในแต่ละเฟรมของแอนิเมชัน
+  // Function that runs on each animation frame
   animate() {
     if (this.props.animate) {
-      // อัพเดตอนุภาคทุกตัว
+      // Update all particles
       const updatedParticles = this.updateParticles();
-      // อัพเดตสถานะด้วยอนุภาคที่อัพเดตแล้วและเวลาปัจจุบัน
+      // Update state with updated particles and current time
       this.setState({ 
-        timestamp: Date.now(),  // ใช้เวลาปัจจุบันเพื่อเป็น trigger ให้ deck.gl รู้ว่าต้องอัพเดตการแสดงผล
+        timestamp: Date.now(),  // Use current time to trigger deck.gl to update display
         particles: updatedParticles 
       });
     }
     
-    // ขอให้เรียกฟังก์ชัน animate อีกครั้งในเฟรมถัดไป (สร้างการเคลื่อนไหวต่อเนื่อง)
+    // Request next animation frame (creates continuous animation)
     this.animationFrame = window.requestAnimationFrame(this.animate.bind(this));
   }
   
-  // สร้างและคืนค่าเลเยอร์ย่อยที่ใช้แสดงผลอนุภาคลม
+  // Create and return sub-layers used to display wind particles
   renderLayers() {
     const { particles } = this.state;
     const { widthScale = 3, animate } = this.props;
     
-    // เมื่อ animation ถูกปิด ให้แสดงลูกศรทิศทางลมแทนการแสดงอนุภาคเคลื่อนที่
+    // When animation is off, display wind direction arrows instead of moving particles
     if (!animate) {
-      // ใช้ PathLayer เพื่อสร้างลูกศรแสดงทิศทางลมตามข้อมูลลมโดยตรง
+      // Use PathLayer to create arrows showing wind direction based directly on wind data
       return [
         new PathLayer({
           id: `${this.props.id}-wind-arrows`,
           data: this.state.windData,
-          pickable: false,  // ไม่ต้องการให้คลิกได้
-          widthMinPixels: 2.25,  // ความกว้างขั้นต่ำของเส้น
+          pickable: false,  // Not selectable
+          widthMinPixels: 2.25,  // Minimum line width
           getPath: (d: WindPoint) => {
             const [x, y] = d.position;
-            // คำนวณจุดปลายของลูกศรตามทิศทางลม
-            const length = 0.5; // ความยาวของเส้นลูกศร
+            // Calculate arrow endpoint based on wind direction
+            const length = 0.5; // Arrow length
             const endX = x + Math.cos(d.direction) * length;
             const endY = y + Math.sin(d.direction) * length;
             
-            // คำนวณจุดสำหรับสร้างหัวลูกศร
-            const arrowSize = 0.15; // ขนาดของหัวลูกศร
-            const arrowAngle = Math.PI / 6; // มุม 30 องศาสำหรับหัวลูกศร
+            // Calculate points for arrow head
+            const arrowSize = 0.15; // Arrow head size
+            const arrowAngle = Math.PI / 6; // 30 degree angle for arrow head
             
-            // คำนวณจุดด้านซ้ายของหัวลูกศร (จากจุดปลายลูกศร)
+            // Calculate left point of arrow head (from arrow endpoint)
             const leftX = endX - arrowSize * Math.cos(d.direction + arrowAngle);
             const leftY = endY - arrowSize * Math.sin(d.direction + arrowAngle);
             
-            // คำนวณจุดด้านขวาของหัวลูกศร (จากจุดปลายลูกศร)
+            // Calculate right point of arrow head (from arrow endpoint)
             const rightX = endX - arrowSize * Math.cos(d.direction - arrowAngle);
             const rightY = endY - arrowSize * Math.sin(d.direction - arrowAngle);
             
-            // เส้นทางที่สร้างเป็นลูกศรที่สมบูรณ์
-            // รูปแบบ: จุดเริ่มต้น -> จุดปลาย -> จุดด้านซ้ายของหัวลูกศร -> จุดปลาย -> จุดด้านขวาของหัวลูกศร
+            // Complete path that forms the arrow
+            // Format: start point -> end point -> left arrow head -> end point -> right arrow head
             return [
-              [x, y],          // จุดเริ่มต้น
-              [endX, endY],    // จุดปลาย
-              [leftX, leftY],  // ส่วนด้านซ้ายของหัวลูกศร
-              [endX, endY],    // กลับมาที่จุดปลาย
-              [rightX, rightY] // ส่วนด้านขวาของหัวลูกศร
+              [x, y],          // Start point
+              [endX, endY],    // End point
+              [leftX, leftY],  // Left side of arrow head
+              [endX, endY],    // Back to end point
+              [rightX, rightY] // Right side of arrow head
             ];
           },
           getColor: (d: WindPoint) => {
-            // ใช้ฟังก์ชัน getWindColor เพื่อรับสีที่เหมาะสมตามความเร็วลม
+            // Get appropriate color based on wind speed
             const [r, g, b] = getWindColor(d.speed);
-            return [r, g, b, 200]; // กำหนดความโปร่งใสให้กับเส้นลูกศร
+            return [r, g, b, 200]; // Set transparency for arrow lines
           },
-          getWidth: (d: WindPoint) => d.speed * 3 + 1, // ความหนาของเส้นแปรผันตามความเร็วลม
+          getWidth: (d: WindPoint) => d.speed * 3 + 1, // Line thickness varies with wind speed
         })
       ];
     }
     
-    // กรณีเปิด animation แสดงอนุภาคเคลื่อนไหวตามปกติ โดยใช้ 2 เลเยอร์ร่วมกัน
+    // When animation is on, show moving particles with usual animation by using 2 layers together
     return [
-      // เลเยอร์แรก: ScatterplotLayer สำหรับแสดงจุดอนุภาค
+      // First layer: ScatterplotLayer for particle points
       new ScatterplotLayer({
         id: `${this.props.id}-particles`,
         data: particles,
         pickable: false,
         opacity: 1,
-        stroked: false,  // ไม่มีเส้นขอบ
-        filled: true,    // มีสีเต็มจุด
-        radiusScale: widthScale * 1.5, // ปรับขนาดอนุภาคตาม widthScale
-        getPosition: (d: ParticleType) => d.position,  // ตำแหน่งของจุด
-        getRadius: (d: ParticleType) => d.size * 1.2,  // ขนาดรัศมีของจุด
-        getFillColor: (d: ParticleType) => d.color,    // สีของจุด
-        getLineColor: [255, 255, 255],                 // สีเส้นขอบ (ไม่ถูกใช้เพราะ stroked=false)
+        stroked: false,  // No outline
+        filled: true,    // Fill with color
+        radiusScale: widthScale * 1.5, // Adjust particle size with widthScale
+        getPosition: (d: ParticleType) => d.position,  // Point position
+        getRadius: (d: ParticleType) => d.size * 1.2,  // Point radius
+        getFillColor: (d: ParticleType) => d.color,    // Point color
+        getLineColor: [255, 255, 255],                 // Border color (not used with stroked=false)
         updateTriggers: {
-          // ทริกเกอร์ที่บอก deck.gl ว่าเมื่อไรควรอัพเดตข้อมูลใหม่
+          // Triggers to tell deck.gl when to update data
           getPosition: this.state.timestamp,
           getFillColor: this.state.timestamp,
         }
       }),
       
-      // เลเยอร์ที่สอง: PathLayer สำหรับวาดเส้นทางหางของอนุภาค
+      // Second layer: PathLayer for particle trails
       new PathLayer({
         id: `${this.props.id}-trails`,
         data: particles,
         pickable: false,
-        widthMinPixels: 2.25, // ความกว้างขั้นต่ำของเส้น (ลดลง 50% จาก 4.5)
+        widthMinPixels: 2.25, // Minimum trail width (reduced 50% from 4.5)
         getPath: (d: ParticleType) => {
           const [x, y] = d.position;
-          // สร้างเส้นทางย้อนหลังจากตำแหน่งปัจจุบันในทิศตรงข้ามกับทิศทางลม
-          const length = d.speed * 0.45; // ความยาวของเส้นหางอนุภาค
+          // Create trail path backwards from current position in opposite direction of wind
+          const length = d.speed * 0.45; // Trail length
           const endX = x - Math.cos(d.direction) * length;
           const endY = y - Math.sin(d.direction) * length;
-          return [[x, y], [endX, endY]];  // เส้นจากจุดปัจจุบันไปยังจุดสิ้นสุด
+          return [[x, y], [endX, endY]];  // Line from current to end point
         },
         getColor: (d: ParticleType) => {
-          // ปรับสีของเส้นหางให้สว่างกว่าสีของอนุภาคเล็กน้อย
+          // Make trail color slightly brighter than particle color
           const [r, g, b, a] = d.color;
-          // เพิ่มค่าความสว่าง แต่ไม่เกิน 255
+          // Increase brightness but cap at 255
           return [Math.min(r + 40, 255), Math.min(g + 40, 255), Math.min(b + 40, 255), a];
         },
-        getWidth: (d: ParticleType) => d.size * 0.8, // ความหนาของเส้นหาง (80% ของขนาดอนุภาค)
+        getWidth: (d: ParticleType) => d.size * 0.8, // Trail thickness (80% of particle size)
         updateTriggers: {
           getPath: this.state.timestamp,
           getColor: this.state.timestamp,
@@ -363,19 +363,19 @@ class WindParticleLayer extends CompositeLayer<WindParticleLayerProps> {
   }
 }
 
-// ฟังก์ชันช่วยสำหรับสร้าง WindLayer อย่างสะดวก - ฟังก์ชันนี้จะถูกเรียกใช้จากภายนอกไฟล์
+// Helper function to easily create WindLayer - this function is called from outside this file
 export const createWindLayer = ({
   bounds,
-  density = 25,      // ความหนาแน่นพื้นฐาน 25 จุดต่อแกน
-  lengthScale = 0.5,  // ตัวคูณความยาวพื้นฐาน 0.5
-  widthScale = 3,     // ตัวคูณความกว้างพื้นฐาน 3
-  particleCount = 1500, // จำนวนอนุภาคพื้นฐาน 1500 อนุภาค
-  animate = true,     // เปิดการเคลื่อนไหวเป็นค่าเริ่มต้น
-  particleSpeed = 0.0075 // ความเร็วอนุภาคพื้นฐาน (ลดความเร็วลง 50% จาก 0.015)
+  density = 25,      // Base density of 25 points per axis
+  lengthScale = 0.5,  // Base length multiplier of 0.5
+  widthScale = 3,     // Base width multiplier of 3
+  particleCount = 1500, // Base particle count of 1500
+  animate = true,     // Animation enabled by default
+  particleSpeed = 0.0075 // Base particle speed (reduced 50% from 0.015)
 }: WindLayerProps) => {
-  // สร้างและคืนค่า WindParticleLayer พร้อมกำหนดค่าตามพารามิเตอร์
+  // Create and return WindParticleLayer with specified parameters
   return new WindParticleLayer({
-    id: 'wind-particle-layer', // กำหนด ID ของเลเยอร์
+    id: 'wind-particle-layer', // Set layer ID
     bounds,
     density,
     lengthScale,
@@ -386,13 +386,13 @@ export const createWindLayer = ({
   });
 };
 
-// React component สำหรับใช้กับ <DeckGL> component
-// ฟังก์ชันนี้เป็น wrapper แบบ React สำหรับ createWindLayer ที่สร้างด้านบน
+// React component for use with <DeckGL> component
+// This function is a React wrapper for the createWindLayer function above
 const WindLayer: React.FC<WindLayerProps> = (props) => {
-  // ใช้ useMemo เพื่อสร้างเลเยอร์เฉพาะเมื่อ props เปลี่ยนแปลง เพื่อประสิทธิภาพ
-  useMemo(() => createWindLayer(props), [props]); // ลดความซับซ้อนของ dependencies เหลือเพียง props
+  // Use useMemo to create layer only when props change, for efficiency
+  useMemo(() => createWindLayer(props), [props]); // Simplified dependencies to just props
   
-  // ไม่จำเป็นต้องคืนค่า JSX เพราะเป็น deck.gl layer (ไม่ใช่ React component ปกติ)
+  // No JSX return needed as this is a deck.gl layer (not a standard React component)
   return null;
 };
 

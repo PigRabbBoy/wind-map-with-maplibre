@@ -1,223 +1,217 @@
 // filepath: /Users/pigrabb/Documents/GitHub/wind-map-with-maplibre/src/data/mockWindData.ts
-// ไฟล์สำหรับสร้างข้อมูลลมจำลองสำหรับการแสดงผลภาพเคลื่อนไหวของทิศทางลม
-// เอกสารนี้รวบรวมทั้งประเภทข้อมูล ฟังก์ชันสร้างข้อมูลลม และฟังก์ชันสร้างภาพเคลื่อนไหว
-// สำหรับแสดงผลทิศทางลมบนแผนที่แบบอินเตอร์แอคทีฟ
+// File for creating mock wind data for animated wind direction visualization
+// This document includes data types, wind data generation functions, and animation functions
+// for displaying interactive wind direction on maps
 
-// ================ ประเภทข้อมูล (Data Types) ================
+// ================ Data Types ================
 
-// กำหนดโครงสร้างข้อมูลของจุดลม
-// จุดลมเป็นหน่วยข้อมูลพื้นฐานที่ใช้แสดงสภาพลมในแต่ละตำแหน่งบนแผนที่
+// Define the wind point data structure
 export type WindPoint = {
-  position: [number, number]; // ตำแหน่งทางภูมิศาสตร์ [ลองจิจูด, ละติจูด]
-  direction: number;          // ทิศทางลม (หน่วยเป็น radians โดยที่ 0 คือทิศตะวันออก และวัดทวนเข็มนาฬิกา)
-  speed: number;              // ความเร็วลม (ค่าปรับให้อยู่ระหว่าง 0-1 เพื่อใช้ในการคำนวณภาพเคลื่อนไหว)
+  position: [number, number];  // Geographic position [longitude, latitude]
+  direction: number;           // Wind direction (measured in radians, where 0 is east and increasing counterclockwise)
+  speed: number;               // Wind speed (normalized value between 0-1 for animation calculations)
 };
 
-// กำหนดโครงสร้างข้อมูลของอนุภาคลมสำหรับการเคลื่อนที่
-// อนุภาคลมใช้แสดงภาพเคลื่อนไหวของการไหลของลมบนแผนที่
+// Define the wind particle data structure for movement
+// Wind particles are used to show the animated flow of wind on the map
 export type WindParticle = {
-  x: number;                  // ตำแหน่ง x บนหน้าจอ (หน่วยเป็น pixel)
-  y: number;                  // ตำแหน่ง y บนหน้าจอ (หน่วยเป็น pixel)
-  age: number;                // อายุปัจจุบันของอนุภาค (นับเป็นจำนวนเฟรม)
-  maxAge: number;             // อายุสูงสุดของอนุภาคก่อนที่จะถูกรีเซ็ตและสร้างใหม่ (จำนวนเฟรม)
-  speed: number;              // ความเร็วของอนุภาค (หน่วยเป็น pixel ต่อเฟรม)
-  direction: number;          // ทิศทางการเคลื่อนที่ (หน่วยเป็น radians)
+  x: number;                  // Screen x position (in pixels)
+  y: number;                  // Screen y position (in pixels)
+  age: number;                // Current age of the particle (counted in frames)
+  maxAge: number;             // Maximum age of particle before it's reset and recreated (frames)
+  speed: number;              // Particle speed (in pixels per frame)
+  direction: number;          // Movement direction (in radians)
 };
 
-// ประเภทข้อมูลสำหรับอ็อบเจกต์แผนที่ที่มีเมธอดแปลงพิกัด
-// จำเป็นสำหรับการแปลงพิกัดระหว่างพิกัดหน้าจอ (pixels) และพิกัดภูมิศาสตร์ (ลองจิจูด/ละติจูด)
+// Type for map object with projection methods
+// Necessary for converting between screen coordinates (pixels) and geographic coordinates (longitude/latitude)
 export type MapWithProjection = {
   unproject: (point: [number, number]) => { lng: number; lat: number };
 };
 
-// ================ ฟังก์ชันสร้างและจัดการข้อมูลลม ================
+// ================ Wind Data Generation and Management Functions ================
 
-// ฟังก์ชันสร้างข้อมูลลมจำลองเป็นกริดบนพื้นที่ที่กำหนด
-// ฟังก์ชันนี้จะสร้างข้อมูลจุดลมเป็นตารางกริดครอบคลุมพื้นที่ทางภูมิศาสตร์ที่กำหนด
-// โดยมีการจำลองรูปแบบลมที่สมจริงตามพื้นที่ของประเทศไทย
+// Function to generate mock wind data as a grid over a specified area
+// This function creates wind data points as a grid covering the specified geographic area
+// with realistic wind patterns simulated for the Thailand region
 export function generateMockWindData(
   bounds: {
-    west: number;             // ขอบเขตด้านตะวันตกของพื้นที่ (ลองจิจูดต่ำสุด)
-    south: number;            // ขอบเขตด้านใต้ของพื้นที่ (ละติจูดต่ำสุด)
-    east: number;             // ขอบเขตด้านตะวันออกของพื้นที่ (ลองจิจูดสูงสุด)
-    north: number;            // ขอบเขตด้านเหนือของพื้นที่ (ละติจูดสูงสุด)
+    west: number;             // Western boundary of area (minimum longitude)
+    south: number;            // Southern boundary of area (minimum latitude)
+    east: number;             // Eastern boundary of area (maximum longitude)
+    north: number;            // Northern boundary of area (maximum latitude)
   },
-  density: number = 15        // ความหนาแน่นของกริด (จำนวนจุดต่อแกน) ค่าเริ่มต้นคือ 15 จุด
+  density: number = 15        // Grid density (points per axis), default is 15 points
 ): WindPoint[] {
   const windData: WindPoint[] = [];
   
-  // กำหนดขีดจำกัดจำนวนจุดเพื่อป้องกันการประมวลผลมากเกินไปและลดการใช้ทรัพยากร
-  const safetyLimit = 500;  // จำกัดจำนวนจุดลมสูงสุดที่สร้างได้เพื่อป้องกันปัญหาประสิทธิภาพ
-  const effectiveDensity = Math.min(density, 30); // จำกัดความหนาแน่นไม่เกิน 30 จุดต่อแกนเพื่อความเหมาะสม
+  // Set safety limit to prevent excessive points generation
+  const safetyLimit = 500;  // Limit the maximum number of wind points to prevent performance issues
+  const effectiveDensity = Math.min(density, 30); // Limit density to a maximum of 30 points per axis for efficiency
   
-  // คำนวณระยะห่างของแต่ละจุดในกริดตามความหนาแน่นที่กำหนด
-  const lonStep = (bounds.east - bounds.west) / effectiveDensity;  // ระยะห่างระหว่างจุดในแนวลองจิจูด
-  const latStep = (bounds.north - bounds.south) / effectiveDensity; // ระยะห่างระหว่างจุดในแนวละติจูด
+  // Calculate step size for latitude and longitude based on bounds and density
+  const lonStep = (bounds.east - bounds.west) / effectiveDensity;  // Longitude step size
+  const latStep = (bounds.north - bounds.south) / effectiveDensity; // Latitude step size
   
-  // นับจำนวนจุดที่สร้างเพื่อให้แน่ใจว่าไม่เกินขีดจำกัดความปลอดภัย
+  // Count points created to ensure we don't exceed safety limits
   let pointCount = 0;
 
-  // สร้างกริดของจุดลมโดยวนลูปตามละติจูดและลองจิจูด
+  // Create grid of wind points by looping through latitudes and longitudes
   for (let lat = bounds.south; lat <= bounds.north; lat += latStep) {
     for (let lon = bounds.west; lon <= bounds.east; lon += lonStep) {
-      // ตรวจสอบว่าเกินขีดจำกัดความปลอดภัยหรือไม่ ถ้าเกินให้หยุดการสร้างจุดและคืนค่าข้อมูลที่มีอยู่
+      // Check if we've exceeded the safety limit, if so, stop creating points and return existing data
       if (pointCount >= safetyLimit) {
         console.warn(`Wind data point limit (${safetyLimit}) reached. Some areas may not be covered.`);
         return windData;
       }
       
-      // จำลองรูปแบบลมสำหรับประเทศไทยตามตำแหน่งทางภูมิศาสตร์
-      // แบ่งเป็นรูปแบบที่แตกต่างกันตามภูมิภาค เพื่อสร้างการไหลของลมที่สมจริงมากขึ้น
-      // ประเทศไทยมีลักษณะรูปแบบลมที่แตกต่างกันระหว่างภาคเหนือและภาคใต้
+      // Simulate wind patterns for Thailand based on geographic position
+      // Divide into different patterns by region to make the flow more realistic
       let direction, speed;
       
-      // ตรวจสอบว่าตำแหน่งปัจจุบันอยู่ในภาคเหนือหรือภาคใต้ของไทย
-      // ใช้ละติจูด 14.0 องศาเป็นเส้นแบ่งอย่างคร่าวๆ ระหว่างภาคเหนือและภาคใต้
+      // Use latitude 14.0 degrees as a rough dividing line between northern and southern regions
       const isNorth = lat > 14.0;
       
       if (isNorth) {
-        // รูปแบบลมสำหรับภาคเหนือของไทย (มีการไหลในแนวตะวันออก-ตะวันตกมากกว่า)
-        // จำลองลักษณะลมมรสุมตะวันตกเฉียงเหนือและมรสุมตะวันออกเฉียงเหนือ
-        // Math.PI * 0.5 คือ 90 องศา (ทิศเหนือ) และมีการปรับตามตำแหน่งโดยอาศัยฟังก์ชัน sin และ cos
+        // Wind pattern for northern Thailand (more east-west flow)
+        // Simulating northeast monsoon and northwest monsoon characteristics
+        // Math.PI * 0.5 is 90 degrees (north) with adjustments based on position using sin and cos functions
         direction = Math.PI * 0.5 + 
           Math.sin(lat * 0.3) * 0.5 + 
           Math.cos(lon * 0.2) * 0.3;
         
-        // ความเร็วลมสำหรับภาคเหนือ โดยมีค่าพื้นฐานที่ 0.3 และแปรผันตามตำแหน่ง
+        // Wind speed for northern region, with a base value of 0.3 and variation based on position
         speed = 0.3 + 0.3 * Math.abs(Math.sin(lat * 0.1 + lon * 0.2));
       } else {
-        // รูปแบบลมสำหรับภาคใต้ของไทย (คาบสมุทร) - มีความผันแปรมากกว่าเนื่องจากอิทธิพลของมหาสมุทร
-        // Math.PI * 0.25 คือ 45 องศา (ทิศตะวันออกเฉียงเหนือ) และมีการปรับที่ซับซ้อนกว่า
-        // เพื่อจำลองอิทธิพลของลมมรสุมและลมทะเลที่เปลี่ยนแปลงบ่อย
+        // Wind pattern for southern Thailand (peninsula) - more variable due to ocean influence
+        // Math.PI * 0.25 is 45 degrees (northeast) with more complex adjustments
+        // to simulate the influence of monsoons and frequently changing sea breezes
         direction = Math.PI * 0.25 + 
           Math.sin(lat * 0.4 + lon * 0.3) * Math.PI * 0.5 + 
           Math.cos(lat * 0.3) * 0.4;
         
-        // ความเร็วลมสำหรับภาคใต้ ซึ่งมีค่าพื้นฐานที่ 0.2 (น้อยกว่าภาคเหนือเล็กน้อย)
-        // แต่มีการผันแปรที่สูงกว่าเนื่องจากอิทธิพลของทะเลโดยรอบ
+        // Wind speed for southern region, with a base value of 0.2 (slightly less than northern)
+        // but with higher variation due to surrounding sea influence
         speed = 0.2 + 
           0.4 * Math.abs(Math.sin(lat * 0.2) + Math.sin(lon * 0.3));
       }
 
-      // เพิ่มจุดลมเข้าในรายการข้อมูล โดยประกอบด้วยตำแหน่ง ทิศทาง และความเร็ว
+      // Add wind point to the data list, including position, direction and speed
       windData.push({
-        position: [lon, lat],  // ตำแหน่งทางภูมิศาสตร์
-        direction,            // ทิศทางลมที่คำนวณได้
-        speed                 // ความเร็วลมที่คำนวณได้
+        position: [lon, lat],  // Geographic position
+        direction,            // Calculated wind direction
+        speed                 // Calculated wind speed
       });
       
-      // เพิ่มจำนวนจุดที่สร้างไปแล้ว
+      // Increment the count of points created
       pointCount++;
     }
   }
 
-  // คืนค่าข้อมูลลมทั้งหมดที่สร้างขึ้น
+  // Return all generated wind data
   return windData;
 }
 
-// ================ ฟังก์ชันสำหรับการสร้างอนุภาคลม ================
+// ================ Wind Particle Functions ================
 
-// สร้างอนุภาคลมสำหรับการแสดงภาพเคลื่อนไหวแสดงทิศทางลมบนแผนที่
-// อนุภาคลมคือจุดที่เคลื่อนที่ตามทิศทางและความเร็วของลมในแต่ละตำแหน่ง
+// Create wind particles for animating wind direction on the map
+// Wind particles are moving points that follow the wind direction and speed at each position
 export function generateWindParticles(
-  windData: WindPoint[],       // ข้อมูลลมที่จะใช้อ้างอิงสำหรับการสร้างอนุภาค
-  width: number,               // ความกว้างของพื้นที่แสดงผลบนหน้าจอ (หน่วยเป็น pixel)
-  height: number,              // ความสูงของพื้นที่แสดงผลบนหน้าจอ (หน่วยเป็น pixel)
-  map: MapWithProjection,      // อ็อบเจกต์แผนที่สำหรับแปลงระหว่างพิกัดหน้าจอและพิกัดภูมิศาสตร์
-  count: number = 1000         // จำนวนอนุภาคลมที่ต้องการสร้าง (ค่าเริ่มต้นคือ 1000)
+  windData: WindPoint[],       // Wind data to reference for creating particles
+  width: number,               // Width of display area on screen (in pixels)
+  height: number,              // Height of display area on screen (in pixels)
+  map: MapWithProjection,      // Map object for conversion between screen and geographic coordinates
+  count: number = 1000         // Number of wind particles to create (default is 1000)
 ): WindParticle[] {
-  // สร้างอาร์เรย์สำหรับเก็บอนุภาคลมทั้งหมด
+  // Create array to store all wind particles
   const particles: WindParticle[] = [];
   
-  // สร้างอนุภาคลมแบบสุ่มกระจายทั่วทั้งพื้นที่แสดงผล
+  // Create wind particles with random distribution across the screen
   for (let i = 0; i < count; i++) {
-    // สุ่มตำแหน่งบนหน้าจอด้วยการสร้างพิกัด x และ y แบบสุ่ม
-    const x = Math.random() * width;   // สุ่มพิกัด x ตั้งแต่ 0 ถึงความกว้างของพื้นที่แสดงผล
-    const y = Math.random() * height;  // สุ่มพิกัด y ตั้งแต่ 0 ถึงความสูงของพื้นที่แสดงผล
+    // Generate random screen position with x and y coordinates
+    const x = Math.random() * width;   // Random x from 0 to display width
+    const y = Math.random() * height;  // Random y from 0 to display height
     
-    // แปลงพิกัดหน้าจอเป็นพิกัดทางภูมิศาสตร์ (ลองจิจูด/ละติจูด) เพื่อใช้ในการหาข้อมูลลม
+    // Convert screen coordinates to geographic coordinates
     const lngLat = map.unproject([x, y]);
     
-    // ค้นหาจุดลมที่อยู่ใกล้กับตำแหน่งปัจจุบันมากที่สุด เพื่อนำค่าทิศทางและความเร็วมาใช้
-    let closestDistance = Infinity;  // เริ่มต้นด้วยระยะทางที่ไกลที่สุด
-    let closestWindPoint: WindPoint | null = null;  // เก็บจุดลมที่ใกล้ที่สุด
+    // Find the wind point closest to this position
+    let closestDistance = Infinity;
+    let closestWindPoint: WindPoint | null = null;
     
-    // วนลูปตรวจสอบทุกจุดลมเพื่อหาจุดที่ใกล้ที่สุด
+    // Loop through all wind points to find the closest
     for (const windPoint of windData) {
-      // คำนวณระยะห่างระหว่างจุดลมและตำแหน่งปัจจุบันโดยใช้ระยะทางแบบยุคลิด (Euclidean distance)
       const distance = Math.sqrt(
         Math.pow(windPoint.position[0] - lngLat.lng, 2) +
         Math.pow(windPoint.position[1] - lngLat.lat, 2)
       );
       
-      // ถ้าพบจุดที่อยู่ใกล้กว่าจุดที่เคยพบ ให้บันทึกเป็นจุดที่ใกล้ที่สุดใหม่
+      // If we found a closer point, update closest point record
       if (distance < closestDistance) {
         closestDistance = distance;
         closestWindPoint = windPoint;
       }
     }
     
-    // ถ้าพบจุดลมที่เหมาะสม ให้สร้างอนุภาคลมใหม่โดยใช้ข้อมูลจากจุดลมนั้น
+    // If a suitable wind point was found, create a new wind particle using that point's data
     if (closestWindPoint) {
-      // กำหนดอายุสูงสุดของอนุภาคแบบสุ่มในช่วง 50-100 เฟรม เพื่อให้อนุภาคมีอายุที่หลากหลาย
+      // Generate random maximum age between 50 and 100 frames
       const maxAge = 50 + Math.random() * 50; 
       
-      // เพิ่มอนุภาคลมเข้าในรายการ
+      // Add new particle to the array
       particles.push({
-        x,                              // ตำแหน่ง x บนหน้าจอ
-        y,                              // ตำแหน่ง y บนหน้าจอ
-        age: Math.random() * maxAge,    // กำหนดอายุเริ่มต้นแบบสุ่มเพื่อให้อนุภาคไม่เริ่มต้นพร้อมกันทั้งหมด
-        maxAge,                         // อายุสูงสุดที่อนุภาคจะมีชีวิตอยู่ได้
-        direction: closestWindPoint.direction,  // ใช้ทิศทางลมจากจุดลมที่ใกล้ที่สุด
-        speed: closestWindPoint.speed * 1.5     // ใช้ความเร็วลมจากจุดลมที่ใกล้ที่สุด และคูณด้วย 1.5 เพื่อให้ภาพเคลื่อนไหวชัดเจนยิ่งขึ้น
+        x,                          // Starting x position
+        y,                          // Starting y position
+        age: Math.random() * maxAge,    // Set initial age randomly to avoid all particles resetting at once
+        maxAge,                         // Maximum lifetime of the particle
+        direction: closestWindPoint.direction,  // Use direction from closest wind point
+        speed: closestWindPoint.speed * 1.5     // Use speed from closest wind point and multiply by 1.5 for clearer animation
       });
     }
   }
   
-  // คืนค่าอนุภาคลมทั้งหมดที่สร้างขึ้น
+  // Return all created wind particles
   return particles;
 }
 
-// ================ ฟังก์ชันอัพเดตอนุภาคลม ================
+// ================ Wind Particle Update Function ================
 
-// อัพเดตอนุภาคลมสำหรับแต่ละเฟรมของการแสดงผลภาพเคลื่อนไหว
-// ฟังก์ชันนี้จะเคลื่อนที่อนุภาคลมตามทิศทางและความเร็ว และจัดการอนุภาคที่หลุดออกนอกหน้าจอหรือมีอายุมากเกินไป
+// This function moves wind particles according to their direction and speed and handles particles that move off-screen or age out
 export function updateWindParticles(
-  particles: WindParticle[],    // อนุภาคลมทั้งหมดที่มีอยู่ในปัจจุบัน
-  windData: WindPoint[],        // ข้อมูลลมสำหรับอ้างอิงทิศทางและความเร็ว
-  width: number,                // ความกว้างของพื้นที่แสดงผล (pixel)
-  height: number,               // ความสูงของพื้นที่แสดงผล (pixel)
-  map: MapWithProjection        // อ็อบเจกต์แผนที่สำหรับแปลงพิกัด
+  particles: WindParticle[],    // All current wind particles
+  windData: WindPoint[],        // Wind data for direction and speed reference
+  width: number,                // Width of display area (pixels)
+  height: number,               // Height of display area (pixels)
+  map: MapWithProjection        // Map object for coordinate conversion
 ): WindParticle[] {
-  // อัพเดตตำแหน่งและคุณสมบัติของอนุภาคลมทุกตัว
+  // Update position and properties of each wind particle
   return particles.map(particle => {
-    // เคลื่อนที่อนุภาคตามทิศทางและความเร็วที่กำหนดไว้
-    // ใช้ฟังก์ชัน Math.cos และ Math.sin เพื่อแยกความเร็วเป็นแนวแกน x และ y
-    // คูณด้วย 2 เพื่อให้การเคลื่อนที่เห็นได้ชัดเจนมากขึ้น
+    // Move the particle according to its direction and speed
+    // Use Math.cos and Math.sin to break velocity into x and y components
+    // Multiply by 2 to make the movement more visible
     particle.x += Math.cos(particle.direction) * particle.speed * 2;
     particle.y += Math.sin(particle.direction) * particle.speed * 2;
     
-    // เพิ่มอายุของอนุภาคขึ้น 1 เฟรม
+    // Increase particle age by 1 frame
     particle.age += 1;
     
-    // ตรวจสอบว่าอนุภาคควรถูกรีเซ็ตหรือไม่
-    // รีเซ็ตเมื่ออนุภาคเก่าเกินไป (อายุถึงค่าสูงสุด) หรือเคลื่อนที่ออกนอกพื้นที่แสดงผล
+    // Check if particle is too old or has moved off-screen
     if (particle.age >= particle.maxAge || 
         particle.x < 0 || particle.x > width ||
         particle.y < 0 || particle.y > height) {
       
-      // รีเซ็ตอนุภาคโดยกำหนดตำแหน่งใหม่แบบสุ่มในพื้นที่แสดงผล
+      // Reset particle with new random position on screen
       const x = Math.random() * width;
       const y = Math.random() * height;
       
-      // แปลงพิกัดหน้าจอเป็นพิกัดทางภูมิศาสตร์เพื่อหาข้อมูลลม
+      // Convert screen coordinates to geographic coordinates to find appropriate wind data
       const lngLat = map.unproject([x, y]);
       
-      // หาจุดลมที่ใกล้กับตำแหน่งใหม่มากที่สุด
+      // Find closest wind point to the new position
       let closestDistance = Infinity;
       let closestWindPoint: WindPoint | null = null;
       
-      // วนลูปตรวจสอบทุกจุดลมเพื่อหาจุดที่ใกล้ที่สุด
+      // Loop through all wind points to find closest
       for (const windPoint of windData) {
         const distance = Math.sqrt(
           Math.pow(windPoint.position[0] - lngLat.lng, 2) +
@@ -230,58 +224,57 @@ export function updateWindParticles(
         }
       }
       
-      // ถ้าพบจุดลมที่เหมาะสม ให้รีเซ็ตอนุภาคด้วยค่าใหม่
+      // If a suitable wind point was found, reset the particle with new values
       if (closestWindPoint) {
         return {
-          x,                          // ตำแหน่ง x ใหม่
-          y,                          // ตำแหน่ง y ใหม่
-          age: 0,                     // รีเซ็ตอายุเป็น 0
-          maxAge: 50 + Math.random() * 50,  // กำหนดอายุสูงสุดใหม่แบบสุ่ม
-          direction: closestWindPoint.direction,  // ใช้ทิศทางลมจากจุดลมใหม่
-          speed: closestWindPoint.speed * 1.5     // ใช้ความเร็วลมจากจุดลมใหม่
+          x,                          // New x position
+          y,                          // New y position
+          age: 0,                     // Reset age to 0
+          maxAge: 50 + Math.random() * 50,  // Set new random maximum age
+          direction: closestWindPoint.direction,  // Set direction from closest wind point
+          speed: closestWindPoint.speed * 1.5     // Set speed from closest wind point
         };
       }
     }
     
-    // ถ้าอนุภาคไม่ได้ถูกรีเซ็ต ให้ใช้อนุภาคที่อัพเดตค่าแล้ว
+    // If particle is still valid, return it with updated position and age
     return particle;
   });
 }
 
-// ================ ฟังก์ชันช่วยสำหรับการแสดงผล ================
+// ================ Helper Functions for Visualization ================
 
-// รับค่าสี RGB สำหรับลมตามความเร็ว เพื่อใช้ในการแสดงผลที่มองเห็นได้ชัดเจน
-// ความเร็วลมที่แตกต่างกันจะมีสีที่แตกต่างกันเพื่อให้ผู้ใช้เห็นความแตกต่างได้ง่าย
+// Get RGB color for wind based on speed to provide clear visual differentiation
+// Different wind speeds have different colors so users can easily see variations
 export function getWindColor(speed: number): [number, number, number] {
-  // สีที่มองเห็นได้ชัดเจนสำหรับการซ้อนทับบนแผนที่
-  // ใช้สีที่มีความอิ่มตัวมากขึ้นเพื่อให้เด่นชัดเมื่อเทียบกับพื้นหลังแผนที่
+  // Clear visible colors for overlay on maps
+  // Using high saturation colors to stand out against map background
   if (speed < 0.3) {
-    // ลมอ่อน (0.0 - 0.3) - สีฟ้าสว่าง
-    return [30, 144, 255]; // DodgerBlue - เหมาะสำหรับแสดงลมที่มีความเร็วต่ำ
+    // Light winds (0.0 - 0.3) - light blue
+    return [30, 144, 255]; // DodgerBlue - suitable for showing low speed winds
   } else if (speed < 0.6) {
-    // ลมปานกลาง (0.3 - 0.6) - ไล่ระดับจากเขียวไปเหลือง
-    // ใช้การคำนวณเพื่อให้ได้สีที่ไล่ระดับตามความเร็วลม
-    const g = Math.round(200 + speed * 55); // ค่า G ในระบบ RGB จะเพิ่มขึ้นตามความเร็ว
-    return [255, g, 0];  // สีเหลือง-ส้ม 
+    // Medium winds (0.3 - 0.6) - green to yellow gradient
+    // Calculate color to create a gradient based on wind speed
+    const g = Math.round(200 + speed * 55); // G value in RGB increases with speed
+    return [255, g, 0];  // Yellow-orange color
   } else {
-    // ลมแรง (0.6 - 1.0) - ส้มถึงแดง
-    // ลดค่า G ในระบบ RGB ลงเมื่อความเร็วลมสูงขึ้น เพื่อให้สีเข้มขึ้น
-    const g = Math.round(165 - speed * 165); // ค่า G จะลดลงตามความเร็วที่เพิ่มขึ้น
-    return [255, g, 0];  // ไล่จากสีส้มไปถึงสีแดงเข้ม
+    // Strong winds (0.6 - 1.0) - orange to red
+    // Decrease G value in RGB as speed increases for darker color
+    const g = Math.round(165 - speed * 165); // G value decreases as speed increases
+    return [255, g, 0];  // Gradient from orange to deep red
   }
 }
 
-// รับค่าสีในรูปแบบ CSS rgba สำหรับอนุภาคลม โดยคำนึงถึงความเร็วและอายุของอนุภาค
-// อนุภาคที่มีอายุมากขึ้นจะจางลง ทำให้เห็นรอยทางของทิศทางลมได้ชัดเจน
+// Get CSS rgba color string for wind particles, accounting for both speed and age
+// Older particles fade out, creating a trail effect that shows wind direction
 export function getParticleColor(speed: number, age: number, maxAge: number): string {
-  // ใช้ฟังก์ชัน getWindColor เพื่อกำหนดสีพื้นฐานตามความเร็วลม
+  // Use getWindColor function to get base color based on wind speed
   const [r, g, b] = getWindColor(speed);
   
-  // คำนวณค่าความโปร่งใสตามอายุของอนุภาค
-  // อนุภาคใหม่จะมีความทึบมากกว่า อนุภาคเก่าจะจางลง
-  // คูณด้วย 0.85 เพื่อให้อนุภาคทั้งหมดมีความโปร่งใสบางส่วนไม่ทึบแน่นเกินไป
+  // Calculate opacity based on particle age
+  // Multiply by 0.85 to ensure all particles have some transparency
   const alpha = (1 - age / maxAge) * 0.85;
   
-  // สร้างและคืนค่าสีในรูปแบบ CSS rgba
+  // Create and return the CSS rgba color value
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
