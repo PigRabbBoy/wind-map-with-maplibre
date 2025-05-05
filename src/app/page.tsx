@@ -1,4 +1,4 @@
-// หน้าหลักของแอปพลิเคชัน
+// Main application page
 "use client";
 
 import dynamic from 'next/dynamic';
@@ -11,7 +11,7 @@ const DynamicMap = dynamic(() => import('./map'), {
 export default function Home() {
   return (
     <main>
-      {/* เรียกใช้คอมโพเนนต์ Map ที่มีการแสดงแผนที่และอนุภาคลม */}
+      {/* Rendering the Map component that displays the map with wind particles */}
       <DynamicMap />
     </main>
   );
