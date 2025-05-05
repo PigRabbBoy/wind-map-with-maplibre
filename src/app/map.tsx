@@ -115,26 +115,21 @@ function Map() {
         });
       }
 
-      if (!webglLayerRef.current) {
-        webglLayerRef.current = createWebGLWindLayer({
-          bounds: mapBoundsRef.current,
-          numParticles: 5000,
-          animate: true,
-          fadeOpacity: 0.996,
-          speedFactor: 0.25,
-          dropRate: 0.003,
-          dropRateBump: 0.01,
-        });
-      }
+      // Always recreate webgl layer with current animation state
+      webglLayerRef.current = createWebGLWindLayer({
+        bounds: mapBoundsRef.current,
+        numParticles: 5000,
+        animate: animationEnabled,
+        fadeOpacity: 0.996,
+        speedFactor: 0.25,
+        dropRate: 0.003,
+        dropRateBump: 0.01,
+      });
 
       // เลือก layer ที่จะแสดงตามสถานะ layerType และ animationEnabled
       let activeLayer;
 
       if (layerType === "webgl") {
-        // Update animation state for WebGL layer
-        if (webglLayerRef.current) {
-          webglLayerRef.current.props.animate = animationEnabled;
-        }
         activeLayer = webglLayerRef.current;
       } else {
         // Standard layer - choose between animated and static

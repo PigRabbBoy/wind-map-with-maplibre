@@ -261,18 +261,19 @@ export default class WebGLWindLayer extends Layer<WebGLWindLayerProps> {
 
   finalizeState() {
     this.stopAnimation();
-
-    // Clean up resources
-    if (this.quadBuffer) this.quadBuffer.delete();
-    if (this.colorRampTexture) this.colorRampTexture.delete();
-    if (this.backgroundTexture) this.backgroundTexture.delete();
-    if (this.screenTexture) this.screenTexture.delete();
-    if (this.particleStateTexture0) this.particleStateTexture0.delete();
-    if (this.particleStateTexture1) this.particleStateTexture1.delete();
-    if (this.particleIndexBuffer) this.particleIndexBuffer.delete();
-    if (this.windTexture) this.windTexture.delete();
-
+    
     const gl = this.context.gl;
+    
+    // Clean up resources
+    if (this.quadBuffer) gl.deleteBuffer(this.quadBuffer);
+    if (this.colorRampTexture) gl.deleteTexture(this.colorRampTexture);
+    if (this.backgroundTexture) gl.deleteTexture(this.backgroundTexture);
+    if (this.screenTexture) gl.deleteTexture(this.screenTexture);
+    if (this.particleStateTexture0) gl.deleteTexture(this.particleStateTexture0);
+    if (this.particleStateTexture1) gl.deleteTexture(this.particleStateTexture1);
+    if (this.particleIndexBuffer) gl.deleteBuffer(this.particleIndexBuffer);
+    if (this.windTexture) gl.deleteTexture(this.windTexture);
+
     if (this.framebuffer && gl) gl.deleteFramebuffer(this.framebuffer);
   }
 
